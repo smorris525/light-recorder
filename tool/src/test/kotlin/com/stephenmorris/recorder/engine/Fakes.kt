@@ -61,20 +61,30 @@ class FakeOutput(override val sampleRate: Int = 48_000) : AudioOutput {
 }
 
 /**
- * A mic whose input frame *k* was heard while render frame *k + offsetFrames* played, against [FakeOutput]'s
+ * A mic whose input frame *k* was heard while render frame *opened + k + offsetFrames* played, against [FakeOutput]'s
  * timestamp. Tests [feed] it samples, which [drain] hands out in order.
  */
-class FakeInput(private val sampleRate: Int = 48_000, var offsetFrames: Long = 0) : AudioInput {
+class FakeInput(
+    private val sampleRate: Int = 48_000,
+    var offsetFrames: Long = 0,
+    /** The render frame playing now, so the input's first frame is placed where it opened. */
+    private val clock: () -> Long = { 0 },
+) : AudioInput {
     var granted = true
     var opens = 0
     override var isOpen = false
     override val meter = InputMeter()
     override var framesDrained = 0L
     private val queued = ArrayDeque<Float>()
+    private var openedAt = 0L
 
     override fun open(): Boolean {
         opens += 1
         isOpen = granted
+        if (granted) {
+            openedAt = clock()
+            framesDrained = 0
+        }
         return granted
     }
 
@@ -102,5 +112,5 @@ class FakeInput(private val sampleRate: Int = 48_000, var offsetFrames: Long = 0
         return count
     }
 
-    override fun inputStamp(): Stamp = Stamp(frame = 0, nanos = offsetFrames * 1_000_000_000L / sampleRate)
+    override fun inputStamp(): Stamp = Stamp(frame = 0, nanos = (openedAt + offsetFrames) * 1_000_000_000L / sampleRate)
 }
