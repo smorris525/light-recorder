@@ -112,7 +112,8 @@ class MixMeasurer(
         for ((id, stem) in rendered) {
             song.tracks.firstOrNull { it.id == id }?.let { stems[id] = stemKey(it, song) to stem }
         }
-        if (levels == null || job?.isActive == false || model.openSongId.value != song.id) {
+        // Dropped if the song closed, or changed while this was measured: a newer measurement is on its way.
+        if (levels == null || job?.isActive == false || model.openSongId.value != song.id || MixLevels.Key(model.song) != key) {
             return
         }
         _mixLevels.value = levels

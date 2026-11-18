@@ -193,4 +193,19 @@ class MixMeasurerTest {
     fun noMixdownWithNothingRecorded() = runBlocking {
         assertNull(measurer().mixdown { })
     }
+
+    @Test
+    fun aMeasurementOfAnOlderVersionOfTheSongIsDropped() = runBlocking {
+        record()
+        val manual = ManualDispatcher()
+        val measurer = measurer(manual)
+
+        val job = launch { measurer.measure(model.song) }
+        yield()
+        model.updateTrack(mic) { it.copy(volume = -6) }
+        manual.runAll()
+        job.join()
+
+        assertNull(measurer.mixLevels.value)
+    }
 }

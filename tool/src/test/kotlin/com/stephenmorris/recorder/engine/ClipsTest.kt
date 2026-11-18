@@ -6,6 +6,9 @@ import com.stephenmorris.recorder.tape.Song
 import com.stephenmorris.recorder.tape.Span
 import java.util.UUID
 import kotlin.io.path.createTempDirectory
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -72,5 +75,37 @@ class ClipsTest {
 
         assertNull(clips.add(floatArrayOf(1f)))
         assertEquals(ClipStore.CAPACITY, clips.allSamples.size)
+    }
+
+    @Test
+    fun preloadReadsOnTheGivenDispatcher() = runBlocking {
+        val clip = UUID.randomUUID()
+        store.saveClip(clip, floatArrayOf(0.5f, 0.25f), rate)
+        val clips = Clips(store, rate)
+        val io = ManualDispatcher()
+
+        val job = launch { clips.preload(songUsing(clip), io) }
+        yield()
+        assertNull(clips.samples(clip))
+
+        io.runAll()
+        job.join()
+        assertContentEquals(floatArrayOf(0.5f, 0.25f), clips.samples(clip))
+        assertEquals(0, clips.index(clip))
+    }
+
+    @Test
+    fun loadAfterPreloadReadsNothing() = runBlocking {
+        val clip = UUID.randomUUID()
+        store.saveClip(clip, floatArrayOf(0.5f), rate)
+        val clips = Clips(store, rate)
+        clips.preload(songUsing(clip), kotlinx.coroutines.Dispatchers.Unconfined)
+        val preloaded = clips.samples(clip)
+        // With the file gone, a read would find nothing; the preloaded samples stay.
+        store.removeUnused(emptyList())
+
+        clips.load(songUsing(clip))
+
+        assertSame(preloaded, clips.samples(clip))
     }
 }
