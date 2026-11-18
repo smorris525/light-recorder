@@ -2,7 +2,9 @@ package com.stephenmorris.recorder.session
 
 import com.stephenmorris.recorder.core.BarWindow
 import com.stephenmorris.recorder.core.Follow
+import com.stephenmorris.recorder.core.MeterId
 import com.stephenmorris.recorder.core.Sound
+import com.stephenmorris.recorder.core.Swing
 import com.stephenmorris.recorder.engine.PatternEditing
 import com.stephenmorris.recorder.engine.PatternStep
 import com.stephenmorris.recorder.engine.PatternTakeState
@@ -88,6 +90,14 @@ class PatternSession(
         firstBar = follow.window(_window.value, step).firstBar
         updateWindow()
     }
+
+    fun setBpm(bpm: Int) = edit { editing.setBpm(id, bpm) }
+
+    fun setMeter(meter: MeterId) = edit { editing.setMeter(id, meter) }
+
+    fun setBars(bars: Int) = edit { editing.setBars(id, bars) }
+
+    fun setSwing(swing: Swing) = edit { editing.setSwing(id, swing) }
 
     /** A rename: trimmed; an empty name keeps the old one. */
     fun rename(typed: String) = edit { editing.rename(id, typed) }

@@ -33,9 +33,11 @@ import com.stephenmorris.recorder.engine.Transport
 import com.stephenmorris.recorder.core.PadLayout
 import com.stephenmorris.recorder.core.Sound
 import com.stephenmorris.recorder.pattern.BarDots
+import com.stephenmorris.recorder.pattern.PatternActionsScreen
 import com.stephenmorris.recorder.pattern.PatternExit
 import com.stephenmorris.recorder.ui.RenameScreen
 import com.stephenmorris.recorder.session.PatternSession
+import com.stephenmorris.recorder.settings.SettingsScreen
 import com.stephenmorris.recorder.ui.RecorderIcons
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
@@ -111,8 +113,9 @@ class PadsScreen(sealedActivity: SealedLightActivity, private val session: Patte
             center = LightTopBarCenter.Text(pattern.name, onClick = {
                 navigateTo({ RenameScreen(it, session.pattern.value.name) }) { typed -> typed?.let(session::rename) }
             }),
-            // The pattern's Actions: to come.
-            rightButton = LightBarButton.LightIcon(LightIcons.LIST, onClick = { }, contentDescription = "Actions"),
+            rightButton = LightBarButton.LightIcon(LightIcons.LIST, onClick = {
+                navigateTo({ PatternActionsScreen(it, session) }) { exit -> exit?.let { goBack(it) } }
+            }, contentDescription = "Actions"),
         )
         BarDots(window, playhead?.let(window::bar), session::showBar)
         BoxWithConstraints(
@@ -128,8 +131,11 @@ class PadsScreen(sealedActivity: SealedLightActivity, private val session: Patte
         }
         LightBottomBar(
             items = listOf(
-                // The pattern's Settings: to come.
-                LightBarButton.LightIcon(LightIcons.SETTINGS, onClick = { }, contentDescription = "Settings"),
+                LightBarButton.LightIcon(
+                    LightIcons.SETTINGS,
+                    onClick = { navigateTo({ SettingsScreen(it, session) }) },
+                    contentDescription = "Settings",
+                ),
                 LightBarButton.Icon(
                     RecorderIcons.metronome(underlined = clickOn),
                     onClick = viewModel::toggleClick,

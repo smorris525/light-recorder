@@ -15,6 +15,7 @@ import com.stephenmorris.recorder.core.Sound
 import com.stephenmorris.recorder.pads.PadsScreen
 import com.stephenmorris.recorder.session.OverviewLayout
 import com.stephenmorris.recorder.session.PatternSession
+import com.stephenmorris.recorder.settings.SettingsScreen
 import com.stephenmorris.recorder.sound.SoundScreen
 import com.stephenmorris.recorder.ui.RecorderIcons
 import com.stephenmorris.recorder.ui.RenameScreen
@@ -71,7 +72,7 @@ class PatternScreen(sealedActivity: SealedLightActivity, private val id: UUID) :
                     navigateTo({ RenameScreen(it, session.pattern.value.name) }) { typed -> typed?.let(session::rename) }
                 }),
                 rightButton = LightBarButton.LightIcon(LightIcons.LIST, onClick = {
-                    // The pattern's Actions: to come.
+                    navigateTo({ PatternActionsScreen(it, session) }) { exit -> exit?.let { goBack(it) } }
                 }, contentDescription = "Actions"),
             )
             BarDots(window, playhead?.let(window::bar), session::showBar)
@@ -96,8 +97,7 @@ class PatternScreen(sealedActivity: SealedLightActivity, private val id: UUID) :
                 items = listOf(
                     LightBarButton.LightIcon(
                         LightIcons.SETTINGS,
-                        // The pattern's Settings: to come.
-                        onClick = { },
+                        onClick = { navigateTo({ SettingsScreen(it, session) }) },
                         contentDescription = "Settings",
                     ),
                     LightBarButton.LightIcon(
