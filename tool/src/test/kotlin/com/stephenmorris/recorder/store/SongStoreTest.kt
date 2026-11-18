@@ -111,4 +111,24 @@ class SongStoreTest {
 
         assertEquals(songs, store.loadSongs())
     }
+
+    // Review: a song that can't be read keeps its recordings, and the file it was in is kept aside.
+    @Test
+    fun aSongThatFailsToDecodeKeepsItsRecordings() {
+        val clip = UUID.randomUUID()
+        store.saveClip(clip, floatArrayOf(1f), 48_000.0)
+        val good = Song.new("good")
+        val goodJson = com.stephenmorris.recorder.tape.SongCoding.encode(listOf(good)).removePrefix("[").removeSuffix("]")
+        val text = """[$goodJson,
+            {"id":"not a uuid","name":"lost","tracks":[{"id":"${UUID.randomUUID()}","number":2,
+            "spans":[{"start":0.0,"end":1.0,"clip":"$clip"}]}]}]"""
+        File(root, "songs.json").writeText(text)
+
+        val loaded = store.loadSongs()
+        store.removeUnused(loaded)
+
+        assertEquals(listOf(good.id), loaded.map { it.id })
+        assertTrue(File(root, "Clips/$clip.clip").exists())
+        assertTrue(root.listFiles()!!.any { it.name.startsWith("songs.json.") && it.name.endsWith(".bak") })
+    }
 }

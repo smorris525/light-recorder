@@ -97,12 +97,14 @@ class MixMeasurer(
             delay(STALE_PAUSE_MILLIS)
         }
         val kept = stems.mapValues { it.value.second }
+        // Taken here, on the main thread: Clips changes as takes land and songs open.
         val clipSamples = clips.allSamples.toMap()
+        val indexes = clips.indexes.toMap()
         val job = currentCoroutineContext()[Job]
         val (levels, rendered) = withContext(NonCancellable + background) {
             val rendered = mutableMapOf<UUID, FloatArray>()
             for (track in stale) {
-                val stem = renderStem(track, song.length) { job?.isActive == false } ?: return@withContext null to rendered
+                val stem = renderStem(track, song.length, indexes) { job?.isActive == false } ?: return@withContext null to rendered
                 rendered[track.id] = stem
             }
             MixLevels.sum(song, kept + rendered, clipSamples, rate) { job?.isActive == false } to rendered
@@ -138,10 +140,11 @@ class MixMeasurer(
         val frameCount = (length * rate).toInt()
         val tracks = sources.sorted().mapNotNull { song.tracks.getOrNull(it - 1) }
         val kept = keptStems(tracks, song)
+        val indexes = clips.indexes.toMap()
         val mix = withContext(background) {
             var mix = FloatArray(frameCount)
             for (track in tracks) {
-                val stem = kept[track.id] ?: renderStem(track, length) { false } ?: FloatArray(0)
+                val stem = kept[track.id] ?: renderStem(track, length, indexes) { false } ?: FloatArray(0)
                 mix = Bounce.accumulate(stem, track.volumeGain, mix)
             }
             mix
@@ -178,6 +181,7 @@ class MixMeasurer(
         }
         val tracks = song.tracks.filter { it.spans.isNotEmpty() || it.hits.isNotEmpty() }
         val kept = keptStems(tracks, song)
+        val indexes = clips.indexes.toMap()
         val shares = tracks.count { kept[it.id] == null } + ENCODE_SHARE
         var lastPercent = -1
         val report = { fraction: Double ->
@@ -194,7 +198,7 @@ class MixMeasurer(
             val stem = kept[track.id] ?: run {
                 val done = rendered
                 withContext(background) {
-                    renderStem(track, song.length, { fraction -> report((done + fraction) / shares) }) {
+                    renderStem(track, song.length, indexes, { fraction -> report((done + fraction) / shares) }) {
                         job?.isActive == false
                     }
                 }?.also { rendered += 1 }
@@ -220,13 +224,14 @@ class MixMeasurer(
     private fun renderStem(
         track: Track,
         songLength: Double,
+        indexes: Map<UUID, Int>,
         progress: (Double) -> Unit = {},
         isCancelled: () -> Boolean,
     ): FloatArray? {
         val kit = if (MixLevels.needsStem(track)) voices ?: RecorderKit.voices(rate).also { voices = it } else emptyList()
         stemsRendered += 1
         return MixLevels.renderStem(
-            track, songLength, clips.clipStore, clips.indexes.toMap(), kit, rate, isCancelled, progress,
+            track, songLength, clips.clipStore, indexes, kit, rate, isCancelled, progress,
         )
     }
 

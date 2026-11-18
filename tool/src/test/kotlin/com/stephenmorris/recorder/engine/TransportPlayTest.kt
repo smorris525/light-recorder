@@ -11,6 +11,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class TransportPlayTest {
@@ -197,6 +198,20 @@ class TransportPlayTest {
         assertTrue(transport.isClipping.value)
         fixture.mix.trackPeaks[2] = 1f
         assertEquals(1.0, transport.playbackLevel(fixture.song.tracks[2].id))
+    }
+
+    // Review: a closed song's recordings are let go, so memory doesn't grow with every song opened.
+    @Test
+    fun closingASongReleasesItsRecordings() {
+        val clip = fixture.clips.add(FloatArray(48_000))!!
+        val index = fixture.clips.index(clip)!!
+
+        model.close()
+
+        assertNull(fixture.clips.index(clip))
+        assertNull(fixture.clips.samples(clip))
+        assertTrue(fixture.clips.indexes.isEmpty())
+        assertNull(fixture.clips.clipStore.samples(index))
     }
 }
 

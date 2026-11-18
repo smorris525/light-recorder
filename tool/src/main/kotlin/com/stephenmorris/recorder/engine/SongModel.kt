@@ -56,6 +56,9 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
     /** Told the song that's just opened, as it opens: the transport loads its recordings. */
     val onOpen = mutableListOf<(Song) -> Unit>()
 
+    /** Told just before the open song closes, while it's still open: the transport ends its takes there. */
+    val onBeforeClose = mutableListOf<() -> Unit>()
+
     /** Told when a song closes (or another opens): the measured mix is forgotten. */
     val onClose = mutableListOf<() -> Unit>()
 
@@ -84,6 +87,9 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
 
     /** Leaves the open song: its tracks are disarmed. */
     fun close() {
+        if (isSongOpen) {
+            onBeforeClose.forEach { it() }
+        }
         arming.value = Arming()
         _openSongId.value = null
         onClose.forEach { it() }

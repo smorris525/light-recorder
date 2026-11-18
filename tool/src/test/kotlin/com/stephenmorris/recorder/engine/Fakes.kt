@@ -93,6 +93,11 @@ class FakeInput(
         queued.clear()
     }
 
+    /** The mic's reader dies (the audio server restarted, say): it reads as closed, and nothing more arrives. */
+    fun die() {
+        isOpen = false
+    }
+
     /** Input arriving: metered, and queued for [drain] while open. */
     fun feed(samples: FloatArray) {
         if (!isOpen) {

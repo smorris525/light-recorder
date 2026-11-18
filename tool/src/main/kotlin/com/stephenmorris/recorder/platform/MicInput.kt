@@ -26,20 +26,25 @@ class MicInput(private val sampleRate: Int) : AudioInput {
 
     @Volatile
     private var running = false
+
+    /** The reader stopped on an error: the mic reads as closed until it's opened again. */
+    @Volatile
+    private var failed = false
     private var loggedLatency = false
 
     override var framesDrained = 0L
         private set
 
     override val isOpen: Boolean
-        get() = record != null
+        get() = record != null && !failed
 
     // RECORD_AUDIO is asked for before a Microphone track arms; without it AudioRecord won't initialise, which is checked.
     @SuppressLint("MissingPermission")
     override fun open(): Boolean {
-        if (record != null) {
+        if (record != null && !failed) {
             return true
         }
+        close()
         val minimum = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         if (minimum <= 0) {
             return false
@@ -77,6 +82,7 @@ class MicInput(private val sampleRate: Int) : AudioInput {
         framesDrained = 0
         loggedLatency = false
         record = built
+        failed = false
         running = true
         reader = Thread({ readLoop(built) }, "RecorderMic").apply { start() }
         return true
@@ -116,6 +122,7 @@ class MicInput(private val sampleRate: Int) : AudioInput {
             if (count <= 0) {
                 if (count < 0) {
                     Log.e(TAG, "mic read failed: $count")
+                    failed = true
                 }
                 break
             }

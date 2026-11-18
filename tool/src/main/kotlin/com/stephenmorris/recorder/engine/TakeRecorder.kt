@@ -49,6 +49,20 @@ class TakeRecorder(
         }
     }
 
+    /** Everything kept, in one array, letting each chunk go as it's copied, so a long take isn't held twice. */
+    fun takeSamples(): FloatArray {
+        val result = FloatArray(length.toInt())
+        var offset = 0
+        while (chunks.isNotEmpty()) {
+            val chunk = chunks.removeAt(0)
+            val count = minOf(CHUNK_FRAMES, result.size - offset)
+            System.arraycopy(chunk, 0, result, offset, count)
+            offset += count
+        }
+        length = 0
+        return result
+    }
+
     /** Everything kept, in one array. */
     fun samples(): FloatArray {
         val result = FloatArray(length.toInt())

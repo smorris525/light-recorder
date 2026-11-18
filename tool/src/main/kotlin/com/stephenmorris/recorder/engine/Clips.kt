@@ -35,6 +35,13 @@ class Clips(private val store: SongStore, val sampleRate: Double) {
         return id
     }
 
+    /** Lets every recording go, as a song closes; the next song's are read as it opens. */
+    fun release() {
+        clipIndexes.values.forEach(clipStore::remove)
+        clipIndexes.clear()
+        clipSamples.clear()
+    }
+
     /** Reads [song]'s recordings that aren't in memory yet, as it opens; missing ones are skipped. */
     fun load(song: Song) {
         val wanted = song.tracks.flatMap { track -> track.spans.mapNotNull { it.clip } }.toSet() - clipIndexes.keys

@@ -173,6 +173,9 @@ class Transport(
             clips.load(song)
             prepare()
         }
+        // Back to the Library ends the takes in the song they were recorded in (spec §6), then lets its recordings go.
+        model.onBeforeClose += { settle() }
+        model.onClose += { clips.release() }
     }
 
     private fun frames(seconds: Double): Long = (seconds * sampleRate).roundToLong()
@@ -188,6 +191,7 @@ class Transport(
 
     /** Brings the output and the mic into line with what's wanted. Runs on every tick, so it's cheap when nothing changes. */
     private fun updateAudio() {
+        settleDeadMic()
         val wantsOutput = !isPaused && model.isSongOpen
         if (wantsOutput && !output.isRunning) {
             output.start()
@@ -211,16 +215,40 @@ class Transport(
 
     /** Leaving the tool (spec §4.4): stops playback, ends a take keeping what it has, and closes the output and mic. */
     fun pause() {
+        settle()
+        isPaused = true
+        output.suspend()
+        input.close()
+    }
+
+    /** Stops, and lands any take now with what's been captured, as the mic or the song is about to go. */
+    private fun settle() {
         stop()
-        // The take has been asked to end: it lands now, with what's been captured, as the mic is about to close.
         drainCapture()
         if (_take.value != null) {
             finishTake()
         }
         settleTakes()
-        isPaused = true
-        output.suspend()
-        input.close()
+    }
+
+    /**
+     * The mic stopped under a take (its reader died, say): the take ends now, with what it has, rather than waiting for
+     * input that won't come. One still in its lead-in is dropped.
+     */
+    private fun settleDeadMic() {
+        val current = _take.value ?: return
+        if (input.isOpen) {
+            return
+        }
+        if (current.isRecording && !current.isEnding) {
+            endTake(heardFrame)
+        }
+        val ended = _take.value ?: return
+        if (ended.isRecording || ended.isEnding) {
+            finishTake()
+        } else {
+            abandonTake()
+        }
     }
 
     /** Back in front: audio may start again. */
@@ -487,7 +515,7 @@ class Transport(
      */
     private fun finishTake() {
         val finished = _take.value ?: return
-        val samples = recorder?.samples() ?: FloatArray(0)
+        val samples = recorder?.takeSamples() ?: FloatArray(0)
         _take.value = null
         recorder = null
         try {

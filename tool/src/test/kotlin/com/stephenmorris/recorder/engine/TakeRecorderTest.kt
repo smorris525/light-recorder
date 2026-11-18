@@ -91,4 +91,14 @@ class TakeRecorderTest {
 
         assertContentEquals(FloatArray(total) { it.toFloat() }, recorder.samples())
     }
+
+    // Review: taking the samples lets the chunks go, so a long take isn't held twice.
+    @Test
+    fun takingTheSamplesLetsTheChunksGo() {
+        val recorder = TakeRecorder(startFrame = 0, levels = levels())
+        recorder.append(FloatArray(100) { 1f }, 100, firstFrame = 0)
+
+        assertEquals(100, recorder.takeSamples().size)
+        assertEquals(0, recorder.takeSamples().size)
+    }
 }

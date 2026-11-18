@@ -15,6 +15,23 @@ object ClipCodec {
         return buffer.array()
     }
 
+    /** Writes what [encode] makes to [out], a block at a time. */
+    fun write(out: java.io.OutputStream, samples: FloatArray, sampleRate: Double) {
+        val block = ByteBuffer.allocate(BLOCK_FLOATS * Float.SIZE_BYTES).order(ByteOrder.LITTLE_ENDIAN)
+        block.putDouble(sampleRate)
+        out.write(block.array(), 0, Double.SIZE_BYTES)
+        var offset = 0
+        while (offset < samples.size) {
+            val count = minOf(BLOCK_FLOATS, samples.size - offset)
+            block.clear()
+            block.asFloatBuffer().put(samples, offset, count)
+            out.write(block.array(), 0, count * Float.SIZE_BYTES)
+            offset += count
+        }
+    }
+
+    private const val BLOCK_FLOATS = 16_384
+
     /** The rate and samples, or `null` under 8 bytes or for a rate that isn't finite and above 0. */
     fun decode(bytes: ByteArray): Pair<Double, FloatArray>? {
         if (bytes.size < Double.SIZE_BYTES) {

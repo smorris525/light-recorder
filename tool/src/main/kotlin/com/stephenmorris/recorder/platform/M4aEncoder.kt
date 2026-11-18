@@ -95,6 +95,11 @@ object M4aEncoder {
                     }
                 }
             }
+            if (outputDone && muxerStarted) {
+                // Writes the file's index; if that fails (the disk full, say), the export failed.
+                muxerStarted = false
+                muxer.stop()
+            }
             outputDone
         } catch (exception: Exception) {
             Log.e(StereoTrackOutput.TAG, "export failed", exception)

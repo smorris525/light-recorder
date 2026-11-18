@@ -18,15 +18,37 @@ class SongStore(private val root: File, private val background: (Runnable) -> Un
     private val clips = File(root, "Clips")
     private val mixes = File(root, "Mix")
 
-    /** The saved songs; none when there's no file yet or it can't be read. */
-    fun loadSongs(): List<Song> = read(songsFile)?.let { SongCoding.decode(it.decodeToString()) }.orEmpty()
+    /**
+     * Whether the songs last loaded were all of them. After a file that couldn't all be read, [removeUnused] keeps every
+     * recording, since some may belong to the songs that were skipped.
+     */
+    @Volatile
+    private var isComplete = true
+
+    /**
+     * The saved songs; none when there's no file yet or it can't be read. A file with songs that can't be read is kept
+     * aside as `songs.json.<time>.bak` before it's next written over, so they aren't lost for good.
+     */
+    fun loadSongs(): List<Song> {
+        val bytes = read(songsFile) ?: return emptyList()
+        val (songs, complete) = SongCoding.decodeReporting(bytes.decodeToString())
+        if (!complete) {
+            isComplete = false
+            File(root, "songs.json.${System.currentTimeMillis()}.bak").let { backup ->
+                runCatching { backup.writeBytes(bytes) }
+                    .onFailure { System.err.println("SongStore: couldn't keep ${backup.name}: $it") }
+            }
+        }
+        return songs
+    }
 
     fun save(songs: List<Song>) {
         background.invoke(Runnable { write(songsFile, SongCoding.encode(songs).encodeToByteArray()) })
     }
 
     fun saveClip(id: UUID, samples: FloatArray, sampleRate: Double) {
-        background.invoke(Runnable { write(clipFile(id), ClipCodec.encode(samples, sampleRate)) })
+        // Streamed, so a long recording isn't copied into one more array to write it.
+        background.invoke(Runnable { write(clipFile(id)) { ClipCodec.write(it, samples, sampleRate) } })
     }
 
     /** A recording's samples at [sampleRate], resampled if it was recorded at another rate; `null` when it isn't there. */
@@ -46,6 +68,9 @@ class SongStore(private val root: File, private val background: (Runnable) -> Un
 
     /** Removes recordings no song plays and deleted songs' mixes, after the writes already queued. */
     fun removeUnused(songs: List<Song>) {
+        if (!isComplete) {
+            return
+        }
         val keptClips = songs.flatMap { song -> song.tracks.flatMap { track -> track.spans.mapNotNull { it.clip } } }
             .map { it.toString() }
             .toSet()
@@ -69,11 +94,13 @@ class SongStore(private val root: File, private val background: (Runnable) -> Un
         null
     }
 
-    private fun write(file: File, bytes: ByteArray) {
+    private fun write(file: File, bytes: ByteArray) = write(file) { it.write(bytes) }
+
+    private fun write(file: File, writeTo: (java.io.OutputStream) -> Unit) {
         val temp = File(file.parentFile, "${file.name}.tmp")
         try {
             file.parentFile?.mkdirs()
-            temp.writeBytes(bytes)
+            temp.outputStream().buffered().use(writeTo)
             if (!temp.renameTo(file)) {
                 throw java.io.IOException("rename failed")
             }

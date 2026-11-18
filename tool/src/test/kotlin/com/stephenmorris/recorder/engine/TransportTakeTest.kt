@@ -243,4 +243,40 @@ class TransportTakeTest {
         assertEquals(mic, live.track)
         assertEquals(0.5f, live.levels.level(10.2, 10.3))
     }
+
+    // Review: back to the Library mid-take ends the take in the song it was recorded in (spec §6).
+    @Test
+    fun closingTheSongMidTakeKeepsTheTakeInIt() {
+        armMic()
+        model.playhead.value = 10.0
+        transport.record()
+        fixture.advance(4_060)
+        val songId = fixture.song.id
+
+        model.close()
+        fixture.advance(100)
+
+        val song = model.songs.value.single { it.id == songId }
+        val span = song.tracks[1].spans.single()
+        assertTrue(abs(span.end - span.start - 1.0) < 0.05)
+        assertFalse(transport.isTakeUnderWay)
+        assertFalse(fixture.input.isOpen)
+        assertFalse(transport.isPlaying.value)
+    }
+
+    // Review: a mic whose reader died mid-take still lets the take end with what it has.
+    @Test
+    fun aDeadMicStillLetsTheTakeEnd() {
+        armMic()
+        model.playhead.value = 10.0
+        transport.record()
+        fixture.advance(4_060)
+        fixture.input.die()
+
+        transport.stop()
+        fixture.advance(100)
+
+        assertFalse(transport.isTakeUnderWay)
+        assertTrue(abs(spans().single().end - 11.0) < 0.05)
+    }
 }
