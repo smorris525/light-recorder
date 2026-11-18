@@ -64,9 +64,19 @@ import kotlinx.coroutines.flow.StateFlow
 class NotesEditorViewModel(context: SealedLightContext, notes: String) : RecorderViewModel<Unit>(context) {
     val state = TextFieldState(notes, TextRange(notes.length))
 
+    /** Leaving the tool saves what's typed so far, in case the tool isn't come back to. */
+    override fun onAppPause() {
+        save()
+        super.onAppPause()
+    }
+
     override fun onCleared() {
-        ready.value?.editing?.setNotes(state.text.toString())
+        save()
         super.onCleared()
+    }
+
+    private fun save() {
+        ready.value?.editing?.setNotes(state.text.toString())
     }
 }
 

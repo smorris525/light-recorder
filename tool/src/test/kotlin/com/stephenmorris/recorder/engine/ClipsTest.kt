@@ -108,4 +108,17 @@ class ClipsTest {
 
         assertSame(preloaded, clips.samples(clip))
     }
+
+    @Test
+    fun releasingKeepsWhatTheNextSongPlays() {
+        val clips = Clips(store, rate)
+        val kept = assertNotNull(clips.add(floatArrayOf(0.1f)))
+        val dropped = assertNotNull(clips.add(floatArrayOf(0.2f)))
+
+        clips.release(keeping = songUsing(kept))
+
+        assertNotNull(clips.samples(kept))
+        assertNull(clips.samples(dropped))
+        assertEquals(setOf(kept), clips.indexes.keys)
+    }
 }

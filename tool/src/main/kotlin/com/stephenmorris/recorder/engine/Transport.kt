@@ -175,7 +175,7 @@ class Transport(
         }
         // Back to the Library ends the takes in the song they were recorded in (spec §6), then lets its recordings go.
         model.onBeforeClose += { settle() }
-        model.onClose += { clips.release() }
+        model.onClose += { next -> clips.release(keeping = next) }
     }
 
     private fun frames(seconds: Double): Long = (seconds * sampleRate).roundToLong()

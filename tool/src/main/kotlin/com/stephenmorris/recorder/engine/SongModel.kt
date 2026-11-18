@@ -64,8 +64,11 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
     /** Told just before the open song closes, while it's still open: the transport ends its takes there. */
     val onBeforeClose = mutableListOf<() -> Unit>()
 
-    /** Told when a song closes (or another opens): the measured mix is forgotten. */
-    val onClose = mutableListOf<() -> Unit>()
+    /**
+     * Told when a song closes, with the song opening in its place, if one is: the measured mix is forgotten, and the
+     * recordings the next song doesn't play are let go.
+     */
+    val onClose = mutableListOf<(Song?) -> Unit>()
 
     private val openIndex: Int
         get() = _openSongId.value?.let { id -> _songs.value.indexOfFirst { it.id == id } } ?: -1
@@ -81,7 +84,7 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
     fun open(id: UUID) {
         // With none open there's nothing to close, and closing would let go of recordings just preloaded for this one.
         if (isSongOpen) {
-            close()
+            close(next = _songs.value.firstOrNull { it.id == id })
         } else {
             arming.value = Arming()
         }
@@ -114,13 +117,15 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
     }
 
     /** Leaves the open song: its tracks are disarmed. */
-    fun close() {
+    fun close() = close(next = null)
+
+    private fun close(next: Song?) {
         if (isSongOpen) {
             onBeforeClose.forEach { it() }
         }
         arming.value = Arming()
         _openSongId.value = null
-        onClose.forEach { it() }
+        onClose.forEach { it(next) }
     }
 
     /** Changes the open song; nothing happens with none open. */

@@ -37,11 +37,16 @@ class Clips(private val store: SongStore, val sampleRate: Double) {
         return id
     }
 
-    /** Lets every recording go, as a song closes; the next song's are read as it opens. */
-    fun release() {
-        clipIndexes.values.forEach(clipStore::remove)
-        clipIndexes.clear()
-        clipSamples.clear()
+    /**
+     * Lets the recordings go as a song closes, except those [keeping] plays (the song opening next, a duplicate say),
+     * which would only be read back from disk; the next song's others are read as it opens.
+     */
+    fun release(keeping: Song? = null) {
+        val kept = keeping?.let(::uses).orEmpty()
+        for (clip in clipIndexes.keys - kept) {
+            clipIndexes.remove(clip)?.let(clipStore::remove)
+            clipSamples.remove(clip)
+        }
     }
 
     /** Reads [song]'s recordings that aren't in memory yet, as it opens; missing ones are skipped. */
@@ -68,8 +73,9 @@ class Clips(private val store: SongStore, val sampleRate: Double) {
         }
     }
 
-    private fun missing(song: Song): Set<UUID> =
-        song.tracks.flatMap { track -> track.spans.mapNotNull { it.clip } }.toSet() - clipIndexes.keys
+    private fun missing(song: Song): Set<UUID> = uses(song) - clipIndexes.keys
+
+    private fun uses(song: Song): Set<UUID> = song.tracks.flatMap { track -> track.spans.mapNotNull { it.clip } }.toSet()
 
     private fun keep(clip: UUID, samples: FloatArray) {
         val index = clipStore.add(samples) ?: return

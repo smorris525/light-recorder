@@ -133,4 +133,16 @@ class SongEditingTest {
 
         assertEquals("Intro", model.pattern(pattern)?.name)
     }
+
+    @Test
+    fun duplicatingKeepsTheRecordingsInMemory() {
+        val samples = FloatArray(10) { 0.5f }
+        val clip = assertNotNull(fixture.clips.add(samples))
+        model.updateTrack(mic) { it.copy(spans = listOf(Span(0.0, 1.0, 0.0, clip))) }
+
+        editing.duplicateOpenSong()
+
+        // Not read back from disk on the main thread: the same array, still in memory.
+        kotlin.test.assertSame(samples, fixture.clips.samples(clip))
+    }
 }
