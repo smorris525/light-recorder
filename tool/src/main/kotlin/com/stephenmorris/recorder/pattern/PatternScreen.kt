@@ -12,6 +12,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.stephenmorris.recorder.core.Sound
+import com.stephenmorris.recorder.pads.PadsScreen
 import com.stephenmorris.recorder.session.OverviewLayout
 import com.stephenmorris.recorder.session.PatternSession
 import com.stephenmorris.recorder.sound.SoundScreen
@@ -104,8 +105,9 @@ class PatternScreen(sealedActivity: SealedLightActivity, private val id: UUID) :
                         onClick = session::togglePlay,
                         contentDescription = if (isPlaying) "Stop" else "Play",
                     ),
-                    // Pads: to come.
-                    LightBarButton.Icon(RecorderIcons.pads(), onClick = { }, contentDescription = "Pads"),
+                    LightBarButton.Icon(RecorderIcons.pads(), onClick = {
+                        navigateTo({ PadsScreen(it, session) }) { exit -> exit?.let { goBack(it) } }
+                    }, contentDescription = "Pads"),
                 ),
             )
         }
