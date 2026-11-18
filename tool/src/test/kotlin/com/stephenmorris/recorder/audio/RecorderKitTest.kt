@@ -2,11 +2,17 @@ package com.stephenmorris.recorder.audio
 
 import com.stephenmorris.recorder.core.ClickKind
 import com.stephenmorris.recorder.core.Sound
+import com.stephenmorris.recorder.tape.ClipStore
+import com.stephenmorris.recorder.tape.MixLevels
+import com.stephenmorris.recorder.tape.Song
+import com.stephenmorris.recorder.tape.sample
+import kotlin.math.log10
 import kotlin.math.abs
 import kotlin.math.pow
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class RecorderKitTest {
@@ -31,5 +37,17 @@ class RecorderKitTest {
     fun voicesAreInDrumsOrder() {
         assertEquals(Sound.entries.map { DrumKit.voiceIndex(it) }, Sound.entries.map { RecorderKit.voice(it) })
         assertEquals(ClickKind.entries.map { DrumKit.clickVoice(it) }, ClickKind.entries.map { RecorderKit.clickVoice(it) })
+    }
+
+    /**
+     * The kit leaves the mix headroom. The default pattern at 0 dB peaks around −6.6 dB,
+     * just under the meter's hot zone (−6.5 dB), not at full scale.
+     */
+    @Test
+    fun defaultPatternPeaksUnderFullScale() {
+        val levels = assertNotNull(MixLevels.render(Song.sample, ClipStore(), emptyMap(), RecorderKit.voices(rate), rate))
+        val peak = assertNotNull(levels.peaks.maxOrNull())
+        val decibels = 20 * log10(peak.toDouble())
+        assertTrue(decibels > -7 && decibels <= -6.5, "peaks at $decibels dB")
     }
 }

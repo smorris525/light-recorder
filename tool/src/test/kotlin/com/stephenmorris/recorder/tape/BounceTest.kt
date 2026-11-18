@@ -1,11 +1,14 @@
 package com.stephenmorris.recorder.tape
 
+import com.stephenmorris.recorder.audio.Voice
+import com.stephenmorris.recorder.core.Sound
 import java.util.UUID
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /** A bounce sums the picked tracks at their volumes (not pans) into one, unclamped. */
@@ -110,5 +113,55 @@ class BounceTest {
     @Test
     fun trimmingSilenceOfQuietIsEmpty() {
         assertEquals(0, Bounce.trimmedSilence(floatArrayOf(1e-7f, 0f)).size)
+    }
+
+    // These need ClipStore and MixLevels.renderStem, so they arrive with them.
+    @Test
+    fun bounceOfMicAndDrumsSumsAtVolumesIgnoringPan() {
+        val rate = 1_000.0
+        val clips = ClipStore()
+        val clip = UUID.randomUUID()
+        val index = assertNotNull(clips.add(FloatArray(500) { 0.5f }))
+        val indexes = mapOf(clip to index)
+
+        var song = Song.new("s")
+        song = song.withTrack(1, song.tracks[1].copy(spans = listOf(Span(0.0, 0.5, 0.0, clip)), volume = -6, pan = 50))
+        song = song.withTrack(2, song.tracks[2].copy(input = TrackInput.DRUMS, hits = listOf(hit(at = 0.25))))
+        val voices = Sound.entries.map { Voice(FloatArray(64) { 0.5f }) }
+        val length = 1.0
+
+        fun stem(track: Track): FloatArray = assertNotNull(MixLevels.renderStem(track, length, clips, indexes, voices, rate))
+        val mic = stem(song.tracks[1])
+        val drums = stem(song.tracks[2])
+
+        var mix = FloatArray(0)
+        for (track in listOf(song.tracks[1], song.tracks[2])) {
+            mix = Bounce.accumulate(stem(track), gain = track.volumeGain, into = mix)
+        }
+
+        assertEquals(maxOf(mic.size, drums.size), mix.size)
+        assertTrue(drums.any { it != 0f })
+        for (frame in mix.indices) {
+            val expected = mic[frame] * 0.501_187f + drums[frame]
+            assertTrue(abs(mix[frame] - expected) < 1e-4f)
+        }
+        assertTrue(abs(mix[100] - 0.5f * 0.501_187f) < 1e-4f)
+    }
+
+    @Test
+    fun aHitAtTheEndKeepsItsTail() {
+        val rate = 8_000.0
+        var song = Song.new("s")
+        song = song.withTrack(0, song.tracks[0].copy(hits = listOf(hit(at = 2.0))))
+        val track = song.tracks[0]
+        val voices = Sound.entries.map { Voice(FloatArray(64) { 0.5f }) }
+        val bounce = Bounce.trimmedSilence(
+            assertNotNull(MixLevels.renderStem(track, song.length, ClipStore(), emptyMap(), voices, rate)),
+        )
+        val hitFrame = (track.contentEnd * rate).toInt()
+
+        assertTrue(bounce.size > (song.contentEnd * rate).toInt())
+        assertTrue(bounce[hitFrame] != 0f)
+        assertTrue(bounce[hitFrame + 32] != 0f)
     }
 }
