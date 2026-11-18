@@ -95,7 +95,7 @@ class ExportViewModel(context: SealedLightContext) : RecorderViewModel<ExportScr
 }
 
 /**
- * Export (spec §13): EXPORTING and a percentage while the song renders, with ✕ to cancel; then where to find the file.
+ * Export (spec §13): "exporting" and a percentage while the song renders, with ✕ to cancel; then where to find the file.
  * A failure goes back to the song's Actions.
  */
 class ExportScreen(sealedActivity: SealedLightActivity) : LightScreen<ExportScreen.Exit?, ExportViewModel>(sealedActivity) {
@@ -118,7 +118,7 @@ class ExportScreen(sealedActivity: SealedLightActivity) : LightScreen<ExportScre
                     verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    LightText("EXPORTING", LightTextVariant.Paragraph)
+                    LightText("exporting", LightTextVariant.Paragraph)
                     LightText("${current.percent}%", LightTextVariant.Heading)
                 }
                 LightBottomBar(

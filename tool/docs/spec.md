@@ -292,7 +292,7 @@ trimmed name (an empty name keeps the old one). **Back cancels.** Playback and t
 
 - **Export** (song Actions) renders the mixdown (0:00 to the last span or hit, not the blank tape after it)
   to a **320 kbps AAC `.m4a`**, using Android's `MediaCodec` and `MediaMuxer`.
-- **While rendering:** `EXPORTING` and a percentage, centred, with `LightIcons.CLOSE` in the bottom bar to cancel, which
+- **While rendering:** `exporting` and a percentage, centred, with `LightIcons.CLOSE` in the bottom bar to cancel, which
   discards the file and goes back.
 - **The file:** `exports/<song name>.m4a` in the shared folder (`LightFileShare`). Exporting the same song again replaces
   its file. Characters a file name can't hold are replaced with `-`.
