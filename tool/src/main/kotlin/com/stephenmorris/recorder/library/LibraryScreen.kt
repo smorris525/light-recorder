@@ -8,9 +8,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.stephenmorris.recorder.platform.RecorderViewModel
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
-import com.thelightphone.sdk.LightViewModel
+import com.thelightphone.sdk.SealedLightContext
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
@@ -18,8 +19,8 @@ import com.thelightphone.sdk.ui.LightTheme
 import com.thelightphone.sdk.ui.LightThemeController
 import com.thelightphone.sdk.ui.LightThemeTokens
 
-/** The library's view model. Empty until the library has its songs. */
-class LibraryViewModel : LightViewModel<Unit>()
+/** The library's view model. It only gets the engines ready until the library has its songs. */
+class LibraryViewModel(context: SealedLightContext) : RecorderViewModel<Unit>(context)
 
 /** The first screen: the song library. A placeholder for now. */
 @InitialScreen
@@ -29,7 +30,7 @@ class LibraryScreen(sealedActivity: SealedLightActivity) :
     override val viewModelClass: Class<LibraryViewModel>
         get() = LibraryViewModel::class.java
 
-    override fun createViewModel(): LibraryViewModel = LibraryViewModel()
+    override fun createViewModel(): LibraryViewModel = LibraryViewModel(lightContext)
 
     @Composable
     override fun Content() {
