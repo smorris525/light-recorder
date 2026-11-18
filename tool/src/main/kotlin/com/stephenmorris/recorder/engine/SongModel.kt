@@ -151,6 +151,14 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
         song.copy(patterns = song.patterns.map { if (it.id == id) change(it) else it })
     }
 
+    /** Removes a song; the open one should be closed first. */
+    fun removeSong(id: UUID) {
+        val list = _songs.value.filter { it.id != id }
+        if (list.size != _songs.value.size) {
+            replaceSongs(list)
+        }
+    }
+
     /** Replaces every song, as the library's own operations do. */
     fun replaceSongs(songs: List<Song>) {
         _songs.value = songs
