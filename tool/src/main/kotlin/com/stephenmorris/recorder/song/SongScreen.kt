@@ -12,6 +12,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.unit.dp
 import com.stephenmorris.recorder.platform.Recorder
 import com.stephenmorris.recorder.platform.RecorderViewModel
+import com.stephenmorris.recorder.track.TrackScreen
 import com.stephenmorris.recorder.ui.RenameScreen
 import com.stephenmorris.recorder.ui.SCREEN_MARGIN
 import com.stephenmorris.recorder.ui.ScreenFrame
@@ -95,7 +96,7 @@ class SongScreen(sealedActivity: SealedLightActivity) : LightScreen<Unit, SongVi
             horizontalArrangement = Arrangement.spacedBy(STRIP_GAP),
         ) {
             for (track in song.tracks) {
-                ChannelStrip(ready, track, onOpen = { }, modifier = Modifier.weight(1f))
+                ChannelStrip(ready, track, onOpen = { navigateTo({ TrackScreen(it, track.id) }) }, modifier = Modifier.weight(1f))
             }
         }
         TransportPanel(ready)
