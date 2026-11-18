@@ -4,6 +4,8 @@ import com.stephenmorris.recorder.store.SongStore
 import com.stephenmorris.recorder.tape.ClipStore
 import com.stephenmorris.recorder.tape.Song
 import java.util.UUID
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.withContext
 
 /**
  * The recordings in memory, at the output's [sampleRate]: the store both renderers read (playback's and the one
@@ -35,21 +37,49 @@ class Clips(private val store: SongStore, val sampleRate: Double) {
         return id
     }
 
-    /** Lets every recording go, as a song closes; the next song's are read as it opens. */
-    fun release() {
-        clipIndexes.values.forEach(clipStore::remove)
-        clipIndexes.clear()
-        clipSamples.clear()
+    /**
+     * Lets the recordings go as a song closes, except those [keeping] plays (the song opening next, a duplicate say),
+     * which would only be read back from disk; the next song's others are read as it opens.
+     */
+    fun release(keeping: Song? = null) {
+        val kept = keeping?.let(::uses).orEmpty()
+        for (clip in clipIndexes.keys - kept) {
+            clipIndexes.remove(clip)?.let(clipStore::remove)
+            clipSamples.remove(clip)
+        }
     }
 
     /** Reads [song]'s recordings that aren't in memory yet, as it opens; missing ones are skipped. */
     fun load(song: Song) {
-        val wanted = song.tracks.flatMap { track -> track.spans.mapNotNull { it.clip } }.toSet() - clipIndexes.keys
-        for (clip in wanted) {
-            val samples = store.loadClip(clip, sampleRate) ?: continue
-            val index = clipStore.add(samples) ?: continue
-            clipIndexes[clip] = index
-            clipSamples[clip] = samples
+        for (clip in missing(song)) {
+            store.loadClip(clip, sampleRate)?.let { keep(clip, it) }
         }
+    }
+
+    /**
+     * Reads [song]'s recordings that aren't in memory yet on [io], then keeps them on the caller's thread, so a song
+     * with long recordings opens without holding up the screen; [load] then finds them in memory.
+     */
+    suspend fun preload(song: Song, io: CoroutineDispatcher) {
+        val wanted = missing(song)
+        if (wanted.isEmpty()) {
+            return
+        }
+        val read = withContext(io) { wanted.mapNotNull { clip -> store.loadClip(clip, sampleRate)?.let { clip to it } } }
+        for ((clip, samples) in read) {
+            if (clip !in clipIndexes) {
+                keep(clip, samples)
+            }
+        }
+    }
+
+    private fun missing(song: Song): Set<UUID> = uses(song) - clipIndexes.keys
+
+    private fun uses(song: Song): Set<UUID> = song.tracks.flatMap { track -> track.spans.mapNotNull { it.clip } }.toSet()
+
+    private fun keep(clip: UUID, samples: FloatArray) {
+        val index = clipStore.add(samples) ?: return
+        clipIndexes[clip] = index
+        clipSamples[clip] = samples
     }
 }

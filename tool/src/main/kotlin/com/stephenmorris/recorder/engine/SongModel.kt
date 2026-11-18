@@ -29,6 +29,11 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
     /** Every song, oldest first. */
     val songs: StateFlow<List<Song>> = _songs.asStateFlow()
 
+    private val _isOpening = MutableStateFlow(false)
+
+    /** A song is being opened ([openPreloaded]): its recordings are being read. */
+    val isOpening: StateFlow<Boolean> = _isOpening.asStateFlow()
+
     /** The open song's id, or `null` on the library. */
     val openSongId: StateFlow<UUID?> = _openSongId.asStateFlow()
 
@@ -59,8 +64,11 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
     /** Told just before the open song closes, while it's still open: the transport ends its takes there. */
     val onBeforeClose = mutableListOf<() -> Unit>()
 
-    /** Told when a song closes (or another opens): the measured mix is forgotten. */
-    val onClose = mutableListOf<() -> Unit>()
+    /**
+     * Told when a song closes, with the song opening in its place, if one is: the measured mix is forgotten, and the
+     * recordings the next song doesn't play are let go.
+     */
+    val onClose = mutableListOf<(Song?) -> Unit>()
 
     private val openIndex: Int
         get() = _openSongId.value?.let { id -> _songs.value.indexOfFirst { it.id == id } } ?: -1
@@ -74,7 +82,12 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
 
     /** Opens a song at 0:00, at the start of the tape, with nothing armed. */
     fun open(id: UUID) {
-        close()
+        // With none open there's nothing to close, and closing would let go of recordings just preloaded for this one.
+        if (isSongOpen) {
+            close(next = _songs.value.firstOrNull { it.id == id })
+        } else {
+            arming.value = Arming()
+        }
         if (_songs.value.none { it.id == id }) {
             return
         }
@@ -85,14 +98,34 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
         onOpen.forEach { it(song) }
     }
 
+    /**
+     * Opens a song once [preload] has run on it (reading its recordings off the main thread). Nothing happens while
+     * another song is opening, so a second tap meanwhile doesn't open two.
+     */
+    suspend fun openPreloaded(id: UUID, preload: suspend (Song) -> Unit) {
+        if (_isOpening.value) {
+            return
+        }
+        val target = _songs.value.firstOrNull { it.id == id } ?: return
+        _isOpening.value = true
+        try {
+            preload(target)
+            open(id)
+        } finally {
+            _isOpening.value = false
+        }
+    }
+
     /** Leaves the open song: its tracks are disarmed. */
-    fun close() {
+    fun close() = close(next = null)
+
+    private fun close(next: Song?) {
         if (isSongOpen) {
             onBeforeClose.forEach { it() }
         }
         arming.value = Arming()
         _openSongId.value = null
-        onClose.forEach { it() }
+        onClose.forEach { it(next) }
     }
 
     /** Changes the open song; nothing happens with none open. */
@@ -121,6 +154,14 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
 
     fun updatePattern(id: UUID, change: (DrumPattern) -> DrumPattern) = updateSong { song ->
         song.copy(patterns = song.patterns.map { if (it.id == id) change(it) else it })
+    }
+
+    /** Removes a song; the open one should be closed first. */
+    fun removeSong(id: UUID) {
+        val list = _songs.value.filter { it.id != id }
+        if (list.size != _songs.value.size) {
+            replaceSongs(list)
+        }
     }
 
     /** Replaces every song, as the library's own operations do. */

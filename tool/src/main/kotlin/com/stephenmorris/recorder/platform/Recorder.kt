@@ -2,7 +2,9 @@ package com.stephenmorris.recorder.platform
 
 import com.stephenmorris.recorder.engine.Clips
 import com.stephenmorris.recorder.engine.MixMeasurer
+import com.stephenmorris.recorder.engine.SongEditing
 import com.stephenmorris.recorder.engine.SongModel
+import com.stephenmorris.recorder.engine.TapeControls
 import com.stephenmorris.recorder.engine.Transport
 import com.stephenmorris.recorder.store.ClickSetting
 import com.stephenmorris.recorder.store.Delayer
@@ -32,6 +34,8 @@ object Recorder {
         val clips: Clips,
         val store: SongStore,
         val click: ClickSetting,
+        val editing: SongEditing,
+        val controls: TapeControls,
     )
 
     private val scope = MainScope()
@@ -74,7 +78,7 @@ object Recorder {
             val transport = Transport(model, output, input, clips)
             val measurer = MixMeasurer(model, transport, clips, store)
             model.clicks = clicks
-            Ready(model, transport, measurer, clips, store, click)
+            Ready(model, transport, measurer, clips, store, click, SongEditing(model, transport, store), TapeControls(model, transport))
         }.also { built -> scope.launch { TickLoop.run(built.transport, built.model) } }
     }
 }

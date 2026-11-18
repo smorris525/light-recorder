@@ -5,7 +5,14 @@ import com.stephenmorris.recorder.store.SongStore
 import com.stephenmorris.recorder.tape.Arming
 import com.stephenmorris.recorder.tape.Song
 import com.stephenmorris.recorder.tape.TapeView
+import java.util.UUID
 import kotlin.io.path.createTempDirectory
+import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -122,6 +129,57 @@ class SongModelTest {
         model.open(first.id)
         model.close()
 
-        assertEquals(listOf("close", "open a", "close"), heard)
+        assertEquals(listOf("open a", "close"), heard)
+    }
+
+    @Test
+    fun openingWithNoSongOpenDoesntCloseAnything() {
+        val model = model()
+        var closes = 0
+        model.onClose += { closes += 1 }
+
+        model.open(first.id)
+        assertEquals(0, closes)
+        model.open(second.id)
+        assertEquals(1, closes)
+    }
+
+    @Test
+    fun aSecondOpenWhileOneIsUnderWayIsIgnored() = runBlocking {
+        val model = model()
+        val gate = CompletableDeferred<Unit>()
+
+        val job = launch { model.openPreloaded(first.id) { gate.await() } }
+        yield()
+        assertTrue(model.isOpening.value)
+        model.openPreloaded(second.id) { }
+        gate.complete(Unit)
+        job.join()
+
+        assertEquals(first.id, model.openSongId.value)
+        assertFalse(model.isOpening.value)
+    }
+
+    @Test
+    fun openPreloadedClearsIsOpeningWhenThePreloadThrows() {
+        val model = model()
+
+        assertFailsWith<IllegalStateException> {
+            runBlocking { model.openPreloaded(first.id) { error("unreadable") } }
+        }
+
+        assertFalse(model.isOpening.value)
+        assertNull(model.openSongId.value)
+    }
+
+    @Test
+    fun openPreloadedIgnoresAnUnknownSong() = runBlocking {
+        val model = model()
+        var preloaded = false
+
+        model.openPreloaded(UUID.randomUUID()) { preloaded = true }
+
+        assertFalse(preloaded)
+        assertNull(model.openSongId.value)
     }
 }
