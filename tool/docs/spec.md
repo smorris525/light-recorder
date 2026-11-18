@@ -341,7 +341,8 @@ Deferred until it's clear what screen-reader support LightOS offers tools.
 
 ## 18. Testing & build order
 
-1. **Core logic** (`com.stephenmorris.recorder.core`, no `android.*`), test-first.
+1. **Core logic** (`com.stephenmorris.recorder.core` for the drum machine, `.audio` for its DSP, `.tape` for
+   the song model; no `android.*`), test-first.
    Drums' core and DSP are copied in with their tests.
 2. **Engines and storage:** mixer and output, capture and the take writer, the transport, mix measurement, bounce
    rendering, the `.m4a` encoder and the song store, behind interfaces with fakes so they stay JVM-testable. Verified on
