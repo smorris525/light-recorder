@@ -4,17 +4,48 @@ import com.stephenmorris.recorder.audio.RecorderKit
 import com.stephenmorris.recorder.tape.MixEvent
 import com.stephenmorris.recorder.tape.MixRenderer
 import com.stephenmorris.recorder.tape.PassBounds
+import com.stephenmorris.recorder.tape.PatternTake
 import com.stephenmorris.recorder.tape.Punch
 import com.stephenmorris.recorder.tape.ScheduledEvent
 import com.stephenmorris.recorder.tape.Song
+import com.stephenmorris.recorder.tape.Span
+import com.stephenmorris.recorder.tape.TakeLevels
 import com.stephenmorris.recorder.tape.TapeScheduler
+import com.stephenmorris.recorder.tape.fadeEdges
 import com.stephenmorris.recorder.tape.gains
 import java.util.UUID
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
+import kotlin.random.Random
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+
+/** An audio recording under way, or waiting for its start. */
+data class AudioTake(
+    val track: UUID,
+    /** Where on the tape recording begins. */
+    val recordTime: Double,
+    val recordFrame: Long,
+    /** Where it stops by itself: the out point. */
+    val outFrame: Long?,
+    /** Where on the tape it ends, once it's been asked to. */
+    val endTime: Double? = null,
+    val seed: Double = Random.nextDouble(0.0, 10.0),
+    val isRecording: Boolean = false,
+    val isEnding: Boolean = false,
+    /** How far it's drawn, in seconds on the tape. */
+    val end: Double,
+)
+
+/** A take's real level, drawn on the lane from the moment it records until the mix is measured with it in. */
+data class LiveTake(
+    val track: UUID,
+    val levels: TakeLevels,
+    /** Its recording, once it's finished. */
+    val clip: UUID? = null,
+)
 
 /**
  * Plays the tape and records takes (spec §4, §5). The tick loop calls [tick] every 20 ms,
@@ -34,6 +65,10 @@ class Transport(
     private val _isPlaying = MutableStateFlow(false)
     private val _isClipping = MutableStateFlow(false)
     private val _isMicRefused = MutableStateFlow(false)
+    private val _take = MutableStateFlow<AudioTake?>(null)
+    private val _countNumber = MutableStateFlow<Int?>(null)
+    private val _patternTake = MutableStateFlow<PatternTake?>(null)
+    private val _liveTake = MutableStateFlow<LiveTake?>(null)
 
     /** The tape, or a pattern on its own, is playing (or counting down to a take). Keep the screen on meanwhile. */
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -44,6 +79,18 @@ class Transport(
     /** The last Microphone track armed couldn't open the mic: its Input reads "microphone not allowed". */
     val isMicRefused: StateFlow<Boolean> = _isMicRefused.asStateFlow()
 
+    /** The audio take under way, or waiting for its lead-in to end. */
+    val take: StateFlow<AudioTake?> = _take.asStateFlow()
+
+    /** The count through a take's lead-in: 3, 2, 1. */
+    val countNumber: StateFlow<Int?> = _countNumber.asStateFlow()
+
+    /** The pattern take or audition under way, for the screens; updated when what they show changes, not every tick. */
+    val patternTake: StateFlow<PatternTake?> = _patternTake.asStateFlow()
+
+    /** The take being recorded, or the last one until the mix is measured with it in: its real level, for the lane. */
+    val liveTake: StateFlow<LiveTake?> = _liveTake.asStateFlow()
+
     val sampleRate = output.sampleRate.toDouble()
     private val mix = output.mix
 
@@ -52,8 +99,28 @@ class Transport(
     /** Each pass the tape has started: from where on it, and when. */
     private val passes = mutableListOf<Pair<Double, Long>>()
 
+    /** The pattern take or audition as it runs. */
+    private var live: PatternTake? = null
+
     /** Where the playhead goes back to when the tape stops: where the last take of this playing began. */
     private var returnTime: Double? = null
+
+    /** Where the takes of this ● stop by themselves, on the tape: the out point after their start. */
+    private var takeEnd: Double? = null
+
+    /** The frame recording begins at, after a lead-in, while that lead-in is under way. */
+    private var leadInEnd: Long? = null
+
+    /** A ● whose takes haven't all landed yet. */
+    private var takesPending = false
+
+    /** The audio take's samples, as they're captured. */
+    private var recorder: TakeRecorder? = null
+
+    /** Render frame less input frame, for the audio take under way: fixed once per take, so its samples stay contiguous. */
+    private var captureOffset: Long? = null
+    private val scratch = FloatArray(16_384)
+
     private val sentTracks = arrayOfNulls<MixEvent>(Song.TRACK_COUNT)
     private val sentDrums = arrayOfNulls<MixEvent>(Song.TRACK_COUNT)
     private val inputMeter = PeakMeter()
@@ -97,12 +164,12 @@ class Transport(
         if (armed == null) {
             refusedTrack = null
         }
-        val wantsInput = wantsOutput && (isTakeUnderWay || (armed != null && armed != refusedTrack))
+        val wantsInput = wantsOutput && (_take.value != null || (armed != null && armed != refusedTrack))
         if (wantsInput && !input.isOpen) {
             if (!input.open()) {
                 refusedTrack = armed
             }
-        } else if (!wantsInput && input.isOpen && !isTakeUnderWay) {
+        } else if (!wantsInput && input.isOpen) {
             input.close()
         }
     }
@@ -110,6 +177,12 @@ class Transport(
     /** Leaving the tool (spec §4.4): stops playback, ends a take keeping what it has, and closes the output and mic. */
     fun pause() {
         stop()
+        // The take has been asked to end: it lands now, with what's been captured, as the mic is about to close.
+        drainCapture()
+        if (_take.value != null) {
+            finishTake()
+        }
+        settleTakes()
         isPaused = true
         output.suspend()
         input.close()
@@ -162,7 +235,7 @@ class Transport(
      * end it plays from 0. Moving on, it doesn't return to the last take.
      */
     fun seek() {
-        if (!_isPlaying.value || isTakeUnderWay) {
+        if (!_isPlaying.value || isTakeUnderWay || live != null) {
             return
         }
         returnTime = null
@@ -194,14 +267,227 @@ class Transport(
         model.isScrubbingPlayhead = false
         mix.send(MixEvent.StopClips)
         mix.stopVoices()
+        val current = _take.value
+        if (current?.isRecording == true) {
+            endTake(heardFrame)
+        } else if (current != null) {
+            abandonTake()
+        }
         scheduler = null
         passes.clear()
         _isPlaying.value = false
+        live = null
+        takeEnd = null
+        leadInEnd = null
+        publishPatternTake()
+        model.playingStep.value = null
         returnTime?.let { time ->
             model.playhead.value = time
             model.updateSong { it.copy(view = it.view.following(time, it.length)) }
         }
         returnTime = null
+        _countNumber.value = null
+    }
+
+    // Recording
+
+    /**
+     * ●: records every armed track together, the Microphone track from the mic and the song's selected pattern onto the
+     * Drums track. From the in point, or from the playhead when stopped, the tape plays a 3 s lead-in first while the
+     * count shows 3-2-1; playing with no in point, the takes punch in at once. With the out point after the start,
+     * recording stops there, and so does the tape. ● again ends the takes. When the tape stops, the playhead returns to
+     * where recording began. Without the mic there's no audio take, which would only be silence over the track.
+     */
+    fun record() {
+        if (isTakeUnderWay) {
+            endTakes()
+            return
+        }
+        val arming = model.arming.value
+        if (arming.isEmpty) {
+            return
+        }
+        if (!_isPlaying.value) {
+            model.isFollowing = true
+        }
+        prepare()
+        val audioTrack = arming.audio?.takeIf { input.isOpen }?.let(model::track)
+        val drumTrack = arming.drums?.let(model::track)
+        val pattern = model.song.currentPattern
+        if (audioTrack == null && (drumTrack == null || pattern == null)) {
+            return
+        }
+        // A new take returns to its own start, not an earlier one's.
+        returnTime = null
+        if (live != null) {
+            stop()
+        }
+        prepare()
+        val song = model.song
+        // A pattern take starts past everything already scheduled, so none of the tape's hits it replaces have played.
+        val aheadFrame = mix.renderedFrames + frames(LOOKAHEAD)
+        val heard = heardFrame
+        val heardTime = tapeTime(heard)
+        val aheadTime = tapeTime(aheadFrame)
+        val audioStart: Pair<Double, Long>
+        val patternStart: Pair<Double, Long>
+        val isPunchingIn: Boolean
+        if (_isPlaying.value && Punch.recordStart(song, model.playhead.value, isPlaying = true) == null &&
+            heardTime != null && aheadTime != null
+        ) {
+            audioStart = heardTime to heard
+            patternStart = aheadTime to aheadFrame
+            isPunchingIn = true
+        } else {
+            isPunchingIn = false
+            // Stopped, or from the in point (or the tape not yet heard): the lead-in, then both takes at once.
+            val start = Punch.recordStart(song, model.playhead.value, isPlaying = false) ?: 0.0
+            val lead = Punch.leadIn(start)
+            haltPlayback()
+            val recordFrame = mix.renderedFrames + frames(START_DELAY + Punch.LEAD_IN)
+            model.playhead.value = lead.tapeFrom
+            beginPlaying(lead.tapeFrom, recordFrame - frames(start - lead.tapeFrom))
+            leadInEnd = recordFrame
+            audioStart = start to recordFrame
+            patternStart = audioStart
+        }
+        takeEnd = Punch.recordEnd(song, audioStart.first)
+        returnTime = audioStart.first
+
+        if (audioTrack != null) {
+            val outFrame = takeEnd?.let { audioStart.second + frames(it - audioStart.first) }
+            val levels = TakeLevels(audioStart.first, sampleRate)
+            _liveTake.value = LiveTake(audioTrack.id, levels)
+            recorder = TakeRecorder(audioStart.second, outFrame ?: Long.MAX_VALUE, levels)
+            captureOffset = null
+            _take.value = AudioTake(
+                track = audioTrack.id,
+                recordTime = audioStart.first,
+                recordFrame = audioStart.second,
+                outFrame = outFrame,
+                end = audioStart.first,
+            )
+            mix.send(MixEvent.SilenceTrack(slot(audioTrack.id), audioStart.second, outFrame ?: Long.MAX_VALUE))
+        }
+        if (drumTrack != null && pattern != null) {
+            live = PatternTake(
+                sampleRate = sampleRate,
+                pattern = pattern.id,
+                startTime = patternStart.first,
+                startFrame = patternStart.second,
+                outTime = takeEnd,
+                track = drumTrack.id,
+            )
+            publishPatternTake()
+        }
+        takesPending = true
+        val pending = live
+        val track = pending?.track
+        if (isPunchingIn && pending != null && track != null && hasRecordings(track, pending.startTime)) {
+            // The scheduler trims a track's recordings under its take only as it schedules them, and the Drums track's
+            // were scheduled before the pattern take: so again, now, without what it records over.
+            playClipsAgain()
+        }
+    }
+
+    /**
+     * ● during the takes. Inside the lead-in it abandons them, and playback stops; after it, the audio take ends at once
+     * and the pattern take after the hits already on their way to being heard, and playback goes on.
+     */
+    private fun endTakes() {
+        val heard = heardFrame
+        val leadIn = leadInEnd
+        if (leadIn != null && heard < leadIn) {
+            if (_take.value != null) {
+                abandonTake()
+            }
+            live = null
+            // Nothing was recorded, so nothing to return to.
+            returnTime = null
+            stop()
+            return
+        }
+        endTake(heard)
+        val current = live
+        if (current?.records == true) {
+            current.requestStop(heard)
+            publishPatternTake()
+        }
+    }
+
+    /** Ends the audio take at [frame]. One that hasn't begun recording is abandoned. */
+    private fun endTake(frame: Long) {
+        val current = _take.value ?: return
+        if (current.isEnding) {
+            return
+        }
+        if (frame <= current.recordFrame) {
+            abandonTake()
+            return
+        }
+        _take.value = current.copy(isEnding = true, endTime = tapeTime(frame))
+        recorder?.end(frame)
+        mix.send(MixEvent.SilenceTrack(slot(current.track), current.recordFrame, frame))
+    }
+
+    /** Drops the audio take with nothing kept, and lets its track be heard again. */
+    private fun abandonTake() {
+        val current = _take.value ?: return
+        mix.send(MixEvent.SilenceTrack(slot(current.track), 0, 0))
+        _take.value = null
+        recorder = null
+        _liveTake.value = null
+    }
+
+    /**
+     * Puts the finished take on the tape, and plays it from here on if the tape's still going. Its track's recordings
+     * after it, left out while it ran, play again too, even when nothing was kept of it.
+     */
+    private fun finishTake() {
+        val finished = _take.value ?: return
+        val samples = recorder?.samples() ?: FloatArray(0)
+        _take.value = null
+        recorder = null
+        try {
+            if (samples.isEmpty()) {
+                _liveTake.value = null
+                return
+            }
+            fadeEdges(samples, (FADE_SECONDS * sampleRate).toInt())
+            val clip = clips.add(samples)
+            if (clip == null) {
+                _liveTake.value = null
+                return
+            }
+            _liveTake.value = _liveTake.value?.copy(clip = clip)
+            val duration = samples.size / sampleRate
+            val span = Span(finished.recordTime, finished.recordTime + duration, finished.seed, clip)
+            model.updateTrack(finished.track) { it.recording(span) }
+        } finally {
+            playClipsAgain()
+        }
+    }
+
+    /**
+     * While the tape plays, its recordings from here on, scheduled again as the song and the takes now stand: the
+     * scheduler trims a track's recordings under a take only as it schedules them.
+     */
+    private fun playClipsAgain() {
+        val scheduler = scheduler
+        if (!_isPlaying.value || scheduler == null || !model.isSongOpen) {
+            return
+        }
+        mix.send(MixEvent.StopClips)
+        val song = model.song
+        handle(scheduler.clipsAgain(song, mix.renderedFrames + frames(START_DELAY), passBounds(song), silence()))
+    }
+
+    /** Whether [track] has recordings still to play after [time]. */
+    private fun hasRecordings(track: UUID, time: Double): Boolean =
+        model.track(track)?.spans?.any { it.end > time } == true
+
+    private fun publishPatternTake() {
+        _patternTake.value = live
     }
 
     // The loop
@@ -231,28 +517,53 @@ class Transport(
             }
         }
         updatePlayhead(heard)
+        updateCount(heard)
+        updateTake(heard)
+        drainCapture()
+        settleTakes()
         if (input.meter.takeClipped()) {
             lastClipNanos = nanoTime()
         }
         _isClipping.value = lastClipNanos?.let { nanoTime() - it < CLIP_HOLD_NANOS } ?: false
     }
 
-    /** The tape's events up to [horizon]. */
+    /** The tape's events up to [horizon]. A take silences what's on its track under it while it runs. */
     private fun scheduleTape(now: Long, horizon: Long) {
         val scheduler = scheduler ?: return
         val song = model.song
         handle(scheduler.advance(horizon, now, song, passBounds(song), silence()))
     }
 
-    /** The stretch of tape each take is recording over, under its track. */
-    private fun silence(): Map<UUID, OpenEndRange<Double>> = emptyMap()
+    /**
+     * The stretch of tape each take is recording over, under its track: from its start to where it ends, or on to the
+     * end while that isn't known. The tape doesn't play what's there, which the take replaces.
+     */
+    private fun silence(): Map<UUID, OpenEndRange<Double>> {
+        val silence = mutableMapOf<UUID, OpenEndRange<Double>>()
+        val current = live
+        val track = current?.track
+        if (current != null && current.records && track != null) {
+            val end = current.endTime ?: current.outTime ?: Double.POSITIVE_INFINITY
+            silence[track] = current.startTime..<maxOf(current.startTime, end)
+        }
+        _take.value?.let { take ->
+            val end = take.endTime ?: takeEnd ?: Double.POSITIVE_INFINITY
+            silence[take.track] = take.recordTime..<maxOf(take.recordTime, end)
+        }
+        return silence
+    }
 
     /** An audio or pattern take is under way. */
     val isTakeUnderWay: Boolean
-        get() = false
+        get() = _take.value != null || live?.records == true
 
-    /** With no take, playback stops at the song's end. */
-    private fun passBounds(song: Song): PassBounds = PassBounds(listOf(song.length))
+    /** With no take, playback stops at the song's end; a take stops only where it ends by itself, if it does. */
+    private fun passBounds(song: Song): PassBounds {
+        if (isTakeUnderWay) {
+            return PassBounds(listOfNotNull(takeEnd))
+        }
+        return PassBounds(listOf(song.length))
+    }
 
     /** Where on the tape [frame] falls, in the pass it's in. */
     private fun tapeTime(frame: Long): Double? {
@@ -299,6 +610,88 @@ class Transport(
         model.follow()
     }
 
+    private fun updateCount(heard: Long) {
+        val leadIn = leadInEnd
+        _countNumber.value = if (leadIn != null && heard < leadIn) {
+            val left = (leadIn - heard) / sampleRate
+            minOf(Punch.LEAD_IN.toInt(), maxOf(1, ceil(left).toInt()))
+        } else {
+            null
+        }
+    }
+
+    private fun updateTake(heard: Long) {
+        var current = _take.value ?: return
+        if (!current.isRecording && heard >= current.recordFrame) {
+            current = current.copy(isRecording = true)
+            _take.value = current
+        }
+        if (!current.isRecording || current.isEnding) {
+            return
+        }
+        // Often enough to draw it growing, without redrawing the screen on every tick.
+        if (model.playhead.value - current.end > 0.03) {
+            _take.value = current.copy(end = model.playhead.value)
+        }
+    }
+
+    /** Once every take of a ● has landed, or been dropped, forgets where they were to stop. */
+    private fun settleTakes() {
+        if (!takesPending || isTakeUnderWay) {
+            return
+        }
+        takesPending = false
+        takeEnd = null
+        leadInEnd = null
+    }
+
+    /**
+     * Moves what the mic has captured into the audio take, placed on the render clock by the timestamps; with no take,
+     * it's let go. The take lands once the mic has passed its end.
+     */
+    private fun drainCapture() {
+        if (!input.isOpen) {
+            return
+        }
+        while (true) {
+            val first = input.framesDrained
+            val count = input.drain(scratch)
+            if (count == 0) {
+                break
+            }
+            recorder?.let { recorder ->
+                val offset = captureOffset ?: alignmentOffset(first + count - 1).also { captureOffset = it }
+                recorder.append(scratch, count, first + offset)
+            }
+            if (count < scratch.size) {
+                break
+            }
+        }
+        val current = _take.value
+        if (current != null && current.isRecording && recorder?.isComplete == true) {
+            finishTake()
+        }
+    }
+
+    /**
+     * Render frame less input frame, from the timestamps (spec §4.3), measured at [inputFrame]; until both clocks have
+     * one, the last frame drained is taken as heard now.
+     */
+    private fun alignmentOffset(inputFrame: Long): Long {
+        val inputStamp = input.inputStamp()
+        val outputStamp = output.outputStamp()
+        val offset = if (inputStamp != null && outputStamp != null) {
+            CaptureAlignment.renderFrame(inputFrame, inputStamp, outputStamp, output.sampleRate) - inputFrame
+        } else {
+            heardFrame - inputFrame
+        }
+        println(
+            "RecorderAudio: take aligned by ${if (inputStamp != null && outputStamp != null) "timestamps" else "the heard frame"}, " +
+                "output latency ${output.latencyFrames} frames, offset $offset frames",
+        )
+        return offset
+    }
+
     // Tracks in the mix
 
     /** Where the track with [id] is in the song, which is its mix slot and its drum bus. */
@@ -343,6 +736,9 @@ class Transport(
 
         /** Before the first event, so that it isn't squeezed into a render that's already under way. */
         const val START_DELAY = 0.05
+
+        /** Each end of a take fades over this, so replacing part of a track never clicks. */
+        const val FADE_SECONDS = 0.005
 
         private const val CLIP_HOLD_NANOS = 2_000_000_000L
     }

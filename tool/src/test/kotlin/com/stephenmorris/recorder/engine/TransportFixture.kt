@@ -47,6 +47,18 @@ class TransportFixture(song: Song = Song.new("Test")) {
         }
     }
 
+    /** Moves the clock on by [millis] without ticking, as a stalled main thread would, while the mic keeps capturing. */
+    fun stall(millis: Int) {
+        repeat(millis / TICK_MS) {
+            mix.renderedFrames += TICK_FRAMES
+            nanos += TICK_MS * 1_000_000L
+            input.feed(FloatArray(TICK_FRAMES) { inputLevel })
+        }
+    }
+
+    /** The open song's track at [index]. */
+    fun track(index: Int) = song.tracks[index]
+
     companion object {
         const val TICK_MS = 20
         const val TICK_FRAMES = 960
