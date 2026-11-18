@@ -21,6 +21,13 @@ class ClipStore {
         return next - 1
     }
 
+    /** Main thread only. Lets a clip go: it plays silence from now on. Its index isn't used again. */
+    fun remove(clip: Int) {
+        if (clip in 0 until CAPACITY) {
+            clips.set(clip, null)
+        }
+    }
+
     /** The clip's samples, or `null` for a clip that isn't in the store. Any thread. */
     internal fun samples(clip: Int): FloatArray? = if (clip in 0 until CAPACITY) clips.get(clip) else null
 

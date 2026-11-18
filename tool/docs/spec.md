@@ -364,6 +364,14 @@ These need hardware; there's no Light Phone III to test on:
 - The faders, pans and ruler scrub on the real touchscreen, and the haptics' feel.
 - The font (Akkurat) and how tight the channel strips are.
 - A Tool Manager download of an export over Wi-Fi.
+- The SDK's permission request on a real Light server. The emulator AVD has no Light server, so its mic was granted
+  with `adb shell pm grant`.
+
+The emulator's numbers (API 34 AVD, 2026-11-17), for comparison with hardware:
+- The output runs at 48 kHz with a 4,360-frame buffer and 0 underruns. The latency read 91 ms at start and 175 ms
+  during a take.
+- The input's timestamp was 9 ms old, and the take was aligned by timestamps.
+- The host mic reached the take only faintly, peaking at −72 dB.
 
 ### Later
 

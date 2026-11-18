@@ -47,7 +47,7 @@ class MixRenderer(
     val clips: ClipStore = ClipStore(),
     /** Whether the limiters run. Off, the mix comes out as summed, over full scale where it would clip: for measuring. */
     private val limits: Boolean = true,
-) {
+) : MixSink {
     private val buses = List(DRUM_BUSES) {
         VoiceRenderer(voices, gain = 1f, compressor = Compressor(sampleRate))
     }
@@ -77,20 +77,20 @@ class MixRenderer(
     private val limiterRight = Limiter(sampleRate = sampleRate)
 
     /** Frames rendered so far: the clock every event's frame refers to. */
-    val renderedFrames: Long
+    override val renderedFrames: Long
         get() = buses[0].renderedFrames
 
     /** Main thread only. Returns `false` if the event was dropped because the queue is full. */
-    fun send(event: MixEvent): Boolean = queue.push(event)
+    override fun send(event: MixEvent): Boolean = queue.push(event)
 
     /** Plays [voice] on drum bus [bus]; a bus out of range plays nothing. */
-    fun trigger(bus: Int, voice: Int, frame: Long, gain: Float) {
+    override fun trigger(bus: Int, voice: Int, frame: Long, gain: Float) {
         if (bus in 0 until DRUM_BUSES) {
             buses[bus].send(VoiceEvent.Trigger(voice, frame, gain))
         }
     }
 
-    fun stopVoices() {
+    override fun stopVoices() {
         for (bus in buses) {
             bus.send(VoiceEvent.StopAll)
         }
@@ -100,7 +100,7 @@ class MixRenderer(
      * The loudest sample the track in [slot] has played, its recordings and its hits at its gains, since this was last
      * asked: what its playback meter shows.
      */
-    fun takeTrackPeak(slot: Int): Float {
+    override fun takeTrackPeak(slot: Int): Float {
         if (slot !in 0 until SLOTS) {
             return 0f
         }

@@ -37,9 +37,13 @@ object SongCoding {
     fun encode(songs: List<Song>): String = json.encodeToString(songs.map { it.dto() })
 
     /** The songs in [text]. Never throws: unreadable JSON gives an empty list, and unreadable songs are dropped. */
-    fun decode(text: String): List<Song> {
-        val array = runCatching { json.parseToJsonElement(text) }.getOrNull() as? JsonArray ?: return emptyList()
-        return array.mapNotNull { element -> runCatching { (element as? JsonObject)?.song() }.getOrNull() }
+    fun decode(text: String): List<Song> = decodeReporting(text).first
+
+    /** The songs in [text], and whether every one of them could be read (an unreadable file reads none). */
+    fun decodeReporting(text: String): Pair<List<Song>, Boolean> {
+        val array = runCatching { json.parseToJsonElement(text) }.getOrNull() as? JsonArray ?: return emptyList<Song>() to false
+        val songs = array.mapNotNull { element -> runCatching { (element as? JsonObject)?.song() }.getOrNull() }
+        return songs to (songs.size == array.size)
     }
 }
 
