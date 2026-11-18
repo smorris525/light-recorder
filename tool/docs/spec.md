@@ -361,7 +361,9 @@ These need hardware; there's no Light Phone III to test on:
 - Output latency, and the pads' feel.
 - What a USB-C headset's mic does to a take (§4.2).
 - CPU: four tracks, the kit and a mic take, with the mix measured in the background.
-- The faders, pans and ruler scrub on the real touchscreen, and the haptics' feel.
+- The faders, pans and ruler scrub on the real touchscreen, and the haptics' feel: the ticks and the faders' and pans'
+  arrival at home use Compose's `SegmentFrequentTick` (light) and `SegmentTick` (firmer).
+- CLIP on the input meter: the emulator's host mic never reaches full scale.
 - The font (Akkurat) and how tight the channel strips are.
 - A Tool Manager download of an export over Wi-Fi.
 - The SDK's permission request on a real Light server. The emulator AVD has no Light server, so its mic was granted

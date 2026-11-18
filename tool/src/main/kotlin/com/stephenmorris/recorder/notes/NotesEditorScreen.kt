@@ -41,6 +41,7 @@ import com.stephenmorris.recorder.ui.ScreenFrame
 import com.stephenmorris.recorder.ui.backButton
 import com.stephenmorris.recorder.ui.scaled
 import com.thelightphone.lp3Keyboard.ui.KeyboardOptions
+import com.thelightphone.lp3Keyboard.ui.LayoutOptions
 import com.thelightphone.lp3Keyboard.ui.viewmodel.EnQwertyLp3KeyboardViewModel
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
@@ -89,7 +90,12 @@ class NotesEditorScreen(sealedActivity: SealedLightActivity, private val notes: 
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    EnQwertyLp3KeyboardViewModel<Unit>(callback, keyboardOptionsFlow = options) as T
+                    EnQwertyLp3KeyboardViewModel<Unit>(
+                        callback,
+                        keyboardOptionsFlow = options,
+                        // As the SDK's editor: no close key on the letters, as there's nothing to close to.
+                        optionsForLayout = { LayoutOptions(!it.isRootLayout) },
+                    ) as T
             },
         )["NotesKeyboard", EnQwertyLp3KeyboardViewModel::class.java]
 
