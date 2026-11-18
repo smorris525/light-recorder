@@ -11,7 +11,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
+import com.stephenmorris.recorder.bounce.BounceScreen
+import com.stephenmorris.recorder.export.ExportScreen
 import com.stephenmorris.recorder.notes.NotesScreen
+import com.stephenmorris.recorder.tape.canBounce
 import com.stephenmorris.recorder.platform.Recorder
 import com.stephenmorris.recorder.platform.RecorderViewModel
 import com.stephenmorris.recorder.ui.DeleteConfirmScreen
@@ -39,8 +42,9 @@ class SongActionsViewModel(context: SealedLightContext) : RecorderViewModel<Song
 }
 
 /**
- * The song's Actions (spec §10), titled with its name: Notes, then after a gap Duplicate and Delete,
- * hidden during a take. Bounce… and Export come later.
+ * The song's Actions (spec §10), titled with its name: Notes, then after a gap Bounce…, Export,
+ * Duplicate and Delete. Bounce… is dimmed until something is recorded, while playing and during a take; Export until
+ * something is recorded and during a take; Duplicate and Delete are hidden during a take.
  */
 class SongActionsScreen(sealedActivity: SealedLightActivity) :
     LightScreen<SongActionsScreen.Exit, SongActionsViewModel>(sealedActivity) {
@@ -66,12 +70,20 @@ class SongActionsScreen(sealedActivity: SealedLightActivity) :
         ready.model.songs.collectAsState().value
         val take by ready.transport.take.collectAsState()
         val patternTake by ready.transport.patternTake.collectAsState()
+        val isPlaying by ready.transport.isPlaying.collectAsState()
         val isTakeUnderWay = take != null || patternTake?.records == true
         val song = ready.model.song
         LightTopBar(leftButton = backButton { goBack() }, center = LightTopBarCenter.Text(song.name))
         Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
             ActionRow("Notes") { navigateTo({ NotesScreen(it) }) }
             Spacer(Modifier.height(24.dp))
+            // Always listed, so they can be found before there's anything to bounce or export; dimmed till then.
+            ActionRow("Bounce…", enabled = song.canBounce && !isPlaying && !isTakeUnderWay) {
+                navigateTo({ BounceScreen(it) }) { exit -> if (exit == BounceScreen.Exit.BOUNCED) goBack() }
+            }
+            ActionRow("Export", enabled = song.canBounce && !isTakeUnderWay) {
+                navigateTo({ ExportScreen(it) }) { exit -> if (exit == ExportScreen.Exit.DONE) goBack() }
+            }
             if (!isTakeUnderWay) {
                 ActionRow("Duplicate") {
                     ready.editing.duplicateOpenSong()
