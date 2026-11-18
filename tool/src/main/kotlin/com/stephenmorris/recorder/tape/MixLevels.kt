@@ -237,7 +237,11 @@ class MixLevels(
             }
         }
 
-        /** Renders every track's stem and sums them: the whole measurement from nothing kept. */
+        /**
+         * Renders the stems of the tracks that need one and sums them with the others' recordings: the whole
+         * measurement from nothing kept. A track without hits is read from [clips], so its audio isn't held twice.
+         * [onStem] is told each track whose stem is rendered.
+         */
         fun render(
             song: Song,
             clips: ClipStore,
@@ -245,14 +249,24 @@ class MixLevels(
             voices: List<Voice>,
             sampleRate: Double,
             isCancelled: () -> Boolean = { false },
+            onStem: (UUID) -> Unit = {},
         ): MixLevels? {
             val stems = mutableMapOf<UUID, FloatArray>()
+            val clipSamples = mutableMapOf<UUID, FloatArray>()
             for (track in song.tracks) {
+                if (!needsStem(track)) {
+                    for (span in track.spans) {
+                        val clip = span.clip ?: continue
+                        clipIndexes[clip]?.let(clips::samples)?.let { clipSamples[clip] = it }
+                    }
+                    continue
+                }
+                onStem(track.id)
                 stems[track.id] = renderStem(
                     track, song.length, clips, clipIndexes, voices, sampleRate, isCancelled,
                 ) ?: return null
             }
-            return sum(song, stems, emptyMap(), sampleRate, isCancelled)
+            return sum(song, stems, clipSamples, sampleRate, isCancelled)
         }
     }
 }

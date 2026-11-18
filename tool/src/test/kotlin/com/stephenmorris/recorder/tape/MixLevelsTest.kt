@@ -198,4 +198,20 @@ class MixLevelsTest {
         MixLevels.sum(song, stems, emptyMap(), rate)
         assertTrue((System.nanoTime() - start) / 1e9 < 1.0)
     }
+
+    // Review: a track with no hits is read from its recordings, not rendered into a duplicate stem.
+    @Test
+    fun renderingReadsTracksWithoutHitsFromTheirRecordings() {
+        val clips = ClipStore()
+        val indexes = mutableMapOf<UUID, Int>()
+        val stemmed = mutableListOf<UUID>()
+        val track = track(0.6f, clips, indexes)
+
+        val levels = assertNotNull(
+            MixLevels.render(song(listOf(track)), clips, indexes, emptyList(), rate, onStem = { stemmed += it }),
+        )
+
+        assertTrue(stemmed.isEmpty())
+        assertTrue(abs(assertNotNull(levels.level(1.2, 1.8)) - 0.6f) < 0.001f)
+    }
 }

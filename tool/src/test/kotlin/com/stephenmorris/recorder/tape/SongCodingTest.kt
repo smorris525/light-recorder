@@ -151,4 +151,44 @@ class SongCodingTest {
 
         assertEquals(listOf(Hit(2.0, Sound.KICK, Level.ACCENT)), song.tracks[0].hits)
     }
+
+    // Review: a value of the wrong type takes its default; it never loses the song or a track's recordings.
+    @Test
+    fun aWrongTypedValueTakesItsDefaultAndLosesNothing() {
+        val clip = UUID.randomUUID()
+        val trackId = UUID.randomUUID()
+        val json = """[{"id":"${UUID.randomUUID()}","name":"s","notes":5,"selectedPattern":7,"view":"wide","inPoint":"x",
+            "tracks":[{"id":"$trackId","number":1,"input":3,"volume":"loud","pan":{},
+                "spans":[{"start":1.0,"end":2.0,"seed":"x","clip":"$clip"},{"start":"one","end":2.0}],
+                "hits":[{"time":1.0,"sound":"kick","level":"loud"}]}],
+            "patterns":[{"id":"${UUID.randomUUID()}","name":3,"bpm":"fast","bars":"two","steps":5}]}]"""
+
+        val song = SongCoding.decode(json).single()
+
+        assertEquals("", song.notes)
+        assertEquals(null, song.inPoint)
+        val track = song.tracks[0]
+        assertEquals(trackId, track.id)
+        assertEquals(TrackInput.MIC, track.input)
+        assertEquals(0, track.volume)
+        assertEquals(0, track.pan)
+        assertEquals(listOf(Span(1.0, 2.0, 0.0, clip)), track.spans)
+        assertEquals(listOf(Hit(1.0, Sound.KICK, Level.HIT)), track.hits)
+        assertEquals(1, song.patterns.size)
+        assertEquals(song.patterns[0].id, song.selectedPattern)
+    }
+
+    @Test
+    fun aFractionalVolumeIsRounded() {
+        val song = decodeOne(
+            """{"id":"${UUID.randomUUID()}","name":"s","tracks":[{"id":"${UUID.randomUUID()}","number":1,"volume":-3.5}]}""",
+        )
+        assertEquals(-4, song.tracks[0].volume)
+    }
+
+    @Test
+    fun aTracksListOfTheWrongTypeOpensWithFourEmptyTracks() {
+        val song = decodeOne("""{"id":"${UUID.randomUUID()}","name":"s","tracks":{}}""")
+        assertEquals(listOf(1, 2, 3, 4), song.tracks.map { it.number })
+    }
 }

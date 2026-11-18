@@ -106,13 +106,12 @@ class BounceTest {
 
     @Test
     fun trimmingSilenceKeepsUpToTheLastSound() {
-        val samples = Bounce.trimmedSilence(floatArrayOf(0.5f, 0f, 1e-3f, 1e-7f, 0f))
-        assertContentEquals(floatArrayOf(0.5f, 0f, 1e-3f), samples)
+        assertEquals(3, Bounce.trimmedLength(floatArrayOf(0.5f, 0f, 1e-3f, 1e-7f, 0f)))
     }
 
     @Test
     fun trimmingSilenceOfQuietIsEmpty() {
-        assertEquals(0, Bounce.trimmedSilence(floatArrayOf(1e-7f, 0f)).size)
+        assertEquals(0, Bounce.trimmedLength(floatArrayOf(1e-7f, 0f)))
     }
 
     // These need ClipStore and MixLevels.renderStem, so they arrive with them.
@@ -155,13 +154,23 @@ class BounceTest {
         song = song.withTrack(0, song.tracks[0].copy(hits = listOf(hit(at = 2.0))))
         val track = song.tracks[0]
         val voices = Sound.entries.map { Voice(FloatArray(64) { 0.5f }) }
-        val bounce = Bounce.trimmedSilence(
-            assertNotNull(MixLevels.renderStem(track, song.length, ClipStore(), emptyMap(), voices, rate)),
-        )
+        val bounce = assertNotNull(MixLevels.renderStem(track, song.length, ClipStore(), emptyMap(), voices, rate))
+        val length = Bounce.trimmedLength(bounce)
         val hitFrame = (track.contentEnd * rate).toInt()
 
-        assertTrue(bounce.size > (song.contentEnd * rate).toInt())
+        assertTrue(length > (song.contentEnd * rate).toInt())
         assertTrue(bounce[hitFrame] != 0f)
         assertTrue(bounce[hitFrame + 32] != 0f)
     }
+
+    // Review: an all-quiet bounce leaves no empty span on the destination.
+    @Test
+    fun aBounceOfNothingLeavesNoEmptySpan() {
+        var song = Song.new("s")
+        song = song.withTrack(0, song.tracks[0].copy(spans = listOf(Span(0.0, 1.0, 1.0))))
+        song = song.applyingBounce(sources = setOf(1), destination = 2, clip = UUID.randomUUID(), duration = 0.0)
+
+        assertTrue(song.tracks.all { it.spans.isEmpty() })
+    }
+
 }

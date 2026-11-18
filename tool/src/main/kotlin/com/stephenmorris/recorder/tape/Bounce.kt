@@ -29,14 +29,11 @@ object Bounce {
     }
 
     /**
-     * [samples] cut after the last one at or above [below] in magnitude (−120 dB by default): the bounce rendered over
-     * the blank tape, without the silence after its last sound. All quiet, it's empty. Returns [samples] itself when
-     * there's nothing to cut, so a song-length bounce is copied only when it's trimmed.
+     * How much of [samples] to keep: up to the last one at or above [below] in magnitude (−120 dB by default), so the
+     * bounce rendered over the blank tape loses the silence after its last sound. All quiet, it's 0. A length rather
+     * than a copy, so a song-length bounce is never copied to trim it.
      */
-    fun trimmedSilence(samples: FloatArray, below: Float = 1e-6f): FloatArray {
-        val end = samples.indexOfLast { abs(it) >= below } + 1
-        return if (end == samples.size) samples else samples.copyOf(end)
-    }
+    fun trimmedLength(samples: FloatArray, below: Float = 1e-6f): Int = samples.indexOfLast { abs(it) >= below } + 1
 }
 
 /** Whether anything is recorded to bounce. */
@@ -46,7 +43,7 @@ val Song.canBounce: Boolean
 /**
  * [sources] (track numbers from 1) replaced by one recording, [clip], on [destination]: the destination plays it from
  * the start at 0 dB, centred; the other sources are emptied but keep their settings. Numbers outside the tracks are
- * ignored.
+ * ignored. A bounce with no [duration] (all quiet) leaves the destination empty, with no span.
  */
 fun Song.applyingBounce(sources: Set<Int>, destination: Int, clip: UUID, duration: Double): Song {
     val list = tracks.toMutableList()
@@ -57,7 +54,7 @@ fun Song.applyingBounce(sources: Set<Int>, destination: Int, clip: UUID, duratio
     }
     if (destination - 1 in list.indices) {
         list[destination - 1] = list[destination - 1].copy(
-            spans = listOf(Span(0.0, duration, 0.0, clip)),
+            spans = if (duration > 0) listOf(Span(0.0, duration, 0.0, clip)) else emptyList(),
             hits = emptyList(),
             volume = 0,
             pan = 0,

@@ -225,4 +225,15 @@ class SongTest {
         assertEquals("A 2", uniqueName("A", listOf("A")))
         assertEquals("A 3", uniqueName("A", listOf("A", "A 2")))
     }
+
+    // Review: an empty or reversed span or range changes nothing, so it can't be saved or play audio twice.
+    @Test
+    fun recordingAnEmptyOrReversedSpanChangesNothing() {
+        val track = Track(number = 1, input = TrackInput.MIC, spans = listOf(Span(0.0, 20.0, 1.0)), hits = listOf(hit(at = 7.0)))
+
+        assertEquals(track, track.recording(Span(10.0, 5.0, 2.0)))
+        assertEquals(track, track.recording(Span(5.0, 5.0, 2.0)))
+        assertEquals(track, track.recording(listOf(hit(at = 6.0)), over = 10.0..<5.0))
+        assertEquals(track.spans, Span.clearing(track.spans, 10.0..<5.0))
+    }
 }

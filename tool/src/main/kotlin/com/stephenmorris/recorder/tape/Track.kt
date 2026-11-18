@@ -35,14 +35,20 @@ data class Track(
     val panText: String
         get() = if (pan == 0) "C" else (if (pan < 0) "L" else "R") + abs(pan)
 
-    /** Records [span], replacing only what it covers: audio and hits alike, so a take on the track clears what's under it. */
-    fun recording(span: Span): Track = copy(
+    /**
+     * Records [span], replacing only what it covers: audio and hits alike, so a take on the track clears what's under
+     * it. An empty or reversed span changes nothing.
+     */
+    fun recording(span: Span): Track = if (span.end <= span.start) this else copy(
         spans = Span.replacing(spans, span),
         hits = hits.filterNot { it.time >= span.start && it.time < span.end },
     )
 
-    /** Records [hits] over [over], dropping the hits already there and the audio under them. */
-    fun recording(hits: List<Hit>, over: OpenEndRange<Double>): Track = copy(
+    /**
+     * Records [hits] over [over], dropping the hits already there and the audio under them. An empty or reversed range
+     * changes nothing.
+     */
+    fun recording(hits: List<Hit>, over: OpenEndRange<Double>): Track = if (over.isEmpty()) this else copy(
         spans = Span.clearing(spans, over),
         hits = (this.hits.filterNot { it.time in over } + hits).sortedBy { it.time },
     )
@@ -77,8 +83,11 @@ data class Span(
         /** [spans] with [new] recorded over them. What's left of a span past [new] starts later in its recording. */
         fun replacing(spans: List<Span>, new: Span): List<Span> = clearing(spans, new.start..<new.end) + new
 
-        /** [spans] with [range] cut out. What's left of a span past the cut starts later in its recording. */
-        fun clearing(spans: List<Span>, range: OpenEndRange<Double>): List<Span> = buildList {
+        /**
+         * [spans] with [range] cut out. What's left of a span past the cut starts later in its recording. An empty or
+         * reversed range cuts nothing.
+         */
+        fun clearing(spans: List<Span>, range: OpenEndRange<Double>): List<Span> = if (range.isEmpty()) spans else buildList {
             val from = range.start
             val to = range.endExclusive
             for (span in spans) {

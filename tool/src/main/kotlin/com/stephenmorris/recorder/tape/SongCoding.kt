@@ -14,11 +14,14 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.doubleOrNull
 
 /**
  * Songs as JSON, for `songs.json` (spec §3). Lenient, so a song saved before a setting existed, or a file that's been
- * damaged, still opens: anything missing or unknown takes its default, numbers out of range are brought back in, and
+ * damaged, still opens: anything missing, unknown or of the wrong type takes its default, numbers out of range are
+ * brought back in, and
  * a song always has four tracks and at least one pattern. Only what makes a song or a track what it is (its id, a
  * song's name, a track's number) has to be there; a song without them is dropped, and a track without them is
  * replaced by an empty Microphone track.
@@ -36,9 +39,7 @@ object SongCoding {
     /** The songs in [text]. Never throws: unreadable JSON gives an empty list, and unreadable songs are dropped. */
     fun decode(text: String): List<Song> {
         val array = runCatching { json.parseToJsonElement(text) }.getOrNull() as? JsonArray ?: return emptyList()
-        return array.mapNotNull { element ->
-            runCatching { json.decodeFromJsonElement(SongDto.serializer(), element).song() }.getOrNull()
-        }
+        return array.mapNotNull { element -> runCatching { (element as? JsonObject)?.song() }.getOrNull() }
     }
 }
 
@@ -56,7 +57,7 @@ private data class SongDto(
 )
 
 @Serializable
-private data class ViewDto(val start: Double = 0.0, val secondsAcross: Double = Song.BLANK_TAPE)
+private data class ViewDto(val start: Double = 0.0, val secondsAcross: Double = TapeView.STANDARD_SECONDS_ACROSS)
 
 @Serializable
 private data class TrackDto(
@@ -96,10 +97,6 @@ private val lenient = Json {
     ignoreUnknownKeys = true
     coerceInputValues = true
 }
-
-/** Each element read as [T], dropping the ones that can't be. */
-private fun <T> List<JsonElement>.readEach(read: (JsonElement) -> T?): List<T> =
-    mapNotNull { runCatching { read(it) }.getOrNull() }
 
 private fun String?.uuid(): UUID? = this?.let { runCatching { UUID.fromString(it) }.getOrNull() }
 
@@ -142,31 +139,47 @@ private fun DrumPattern.dto() = PatternDto(
     steps = JsonPrimitive(steps.toJson()),
 )
 
+// Reading is by hand from the parsed tree, so a value of the wrong type takes its default instead of failing the
+// whole song, as a typed decoder would.
+
+private fun JsonObject.text(key: String): String? = (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.content
+
+private fun JsonObject.number(key: String): Double? =
+    (this[key] as? JsonPrimitive)?.takeUnless { it.isString }?.doubleOrNull?.takeIf { it.isFinite() }
+
+private fun JsonObject.whole(key: String): Int? = number(key)?.let { roundHalfAway(it).toInt() }
+
+private fun JsonObject.objects(key: String): List<JsonObject> =
+    (this[key] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
+
 /** The song, or `null` without an id or a name. */
-private fun SongDto.song(): Song? {
-    val id = id.uuid() ?: return null
-    val name = name ?: return null
+private fun JsonObject.song(): Song? {
+    val id = text("id").uuid() ?: return null
+    val name = text("name") ?: return null
 
     // Exactly the tracks a song has: the saved ones numbered 1 to TRACK_COUNT (the first, if a number repeats), and a
     // Microphone track for each missing number.
-    val saved = tracks.readEach { lenient.decodeFromJsonElement(TrackDto.serializer(), it).track() }
+    val saved = objects("tracks").mapNotNull { it.track() }
     val songTracks = (1..Song.TRACK_COUNT).map { number ->
         saved.firstOrNull { it.number == number } ?: Track(number = number, input = TrackInput.MIC)
     }
 
     // A song always has a drum machine, so one saved without patterns gets the rock pattern a new song has.
-    val songPatterns = patterns.readEach { lenient.decodeFromJsonElement(PatternDto.serializer(), it).pattern() }
-        .ifEmpty { listOf(DrumPattern.rock()) }
-    val selected = selectedPattern.uuid()?.takeIf { wanted -> songPatterns.any { it.id == wanted } }
+    val songPatterns = objects("patterns").mapNotNull { it.pattern() }.ifEmpty { listOf(DrumPattern.rock()) }
+    val selected = text("selectedPattern").uuid()?.takeIf { wanted -> songPatterns.any { it.id == wanted } }
         ?: songPatterns[0].id
+    val view = this["view"] as? JsonObject
 
     return Song(
         id = id,
         name = name,
-        notes = notes,
-        inPoint = inPoint?.coerceAtLeast(0.0),
-        outPoint = outPoint?.coerceAtLeast(0.0),
-        view = TapeView(view.start.coerceAtLeast(0.0), view.secondsAcross.takeIf { it > 0 } ?: Song.BLANK_TAPE),
+        notes = text("notes") ?: "",
+        inPoint = number("inPoint")?.coerceAtLeast(0.0),
+        outPoint = number("outPoint")?.coerceAtLeast(0.0),
+        view = TapeView(
+            (view?.number("start") ?: 0.0).coerceAtLeast(0.0),
+            view?.number("secondsAcross")?.takeIf { it > 0 } ?: TapeView.STANDARD_SECONDS_ACROSS,
+        ),
         tracks = songTracks,
         patterns = songPatterns,
         selectedPattern = selected,
@@ -174,41 +187,45 @@ private fun SongDto.song(): Song? {
 }
 
 /** The track, or `null` without an id or a number. */
-private fun TrackDto.track(): Track? {
-    val id = id.uuid() ?: return null
-    val number = number ?: return null
+private fun JsonObject.track(): Track? {
+    val id = text("id").uuid() ?: return null
+    val number = whole("number") ?: return null
+    val volume = whole("volume") ?: 0
     return Track(
         id = id,
         number = number,
-        input = TrackInput.fromRaw(input) ?: TrackInput.MIC,
+        input = TrackInput.fromRaw(text("input")) ?: TrackInput.MIC,
         volume = if (volume <= Track.SILENT) Track.SILENT else volume.coerceIn(Track.VOLUMES),
-        pan = pan.coerceIn(-50, 50),
-        spans = spans.readEach { element ->
-            val span = lenient.decodeFromJsonElement(SpanDto.serializer(), element)
-            Span(span.start, span.end, span.seed, span.clip.uuid(), span.sourceTime).takeIf { it.end > it.start }
+        pan = (whole("pan") ?: 0).coerceIn(-50, 50),
+        spans = objects("spans").mapNotNull { span ->
+            val start = span.number("start") ?: return@mapNotNull null
+            val end = span.number("end") ?: return@mapNotNull null
+            Span(start, end, span.number("seed") ?: 0.0, span.text("clip").uuid(), span.number("sourceTime") ?: 0.0)
+                .takeIf { it.end > it.start }
         },
-        hits = hits.readEach { element ->
-            val hit = lenient.decodeFromJsonElement(HitDto.serializer(), element)
-            Sound.fromRaw(hit.sound)?.let { Hit(hit.time, it, Level.fromRaw(hit.level)) }
+        hits = objects("hits").mapNotNull { hit ->
+            val time = hit.number("time") ?: return@mapNotNull null
+            val sound = Sound.fromRaw(hit.text("sound") ?: return@mapNotNull null) ?: return@mapNotNull null
+            Hit(time, sound, Level.fromRaw(hit.whole("level")))
         }.sortedBy { it.time },
     )
 }
 
 /** The pattern, or `null` without an id. Steps that can't be read open empty. */
-private fun PatternDto.pattern(): DrumPattern? {
-    val id = id.uuid() ?: return null
-    val stepsText = when (val element = steps) {
+private fun JsonObject.pattern(): DrumPattern? {
+    val id = text("id").uuid() ?: return null
+    val stepsText = when (val element = this["steps"]) {
         is JsonPrimitive -> element.content
         null -> ""
         else -> element.toString()
     }
     return DrumPattern(
         id = id,
-        name = name,
-        bpm = Tempo.clamped(bpm),
-        meter = MeterId.fromRaw(meter),
-        swing = Swing.fromRaw(swing),
-        bars = MeterLayout.clampedBars(bars),
+        name = text("name") ?: "A",
+        bpm = Tempo.clamped(whole("bpm") ?: 100),
+        meter = MeterId.fromRaw(text("meter")),
+        swing = Swing.fromRaw(text("swing")),
+        bars = MeterLayout.clampedBars(whole("bars") ?: 1),
         steps = StepGrid.fromJson(stepsText),
     )
 }

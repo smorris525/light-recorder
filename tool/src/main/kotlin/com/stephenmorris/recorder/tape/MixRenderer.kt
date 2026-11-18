@@ -109,7 +109,8 @@ class MixRenderer(
 
     /** Audio thread only. Fills `left` and `right` up to [frameCount] (at most `maxFrames`). */
     fun render(left: FloatArray, right: FloatArray, frameCount: Int) {
-        val count = minOf(frameCount, maxFrames, left.size, right.size)
+        // Pairs, not one four-argument minOf: that's the vararg overload, which allocates an array.
+        val count = minOf(minOf(frameCount, maxFrames), minOf(left.size, right.size))
         val start = renderedFrames
         drainEvents()
 
