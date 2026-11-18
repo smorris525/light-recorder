@@ -2,6 +2,7 @@ package com.stephenmorris.recorder.platform
 
 import com.stephenmorris.recorder.engine.Clips
 import com.stephenmorris.recorder.engine.MixMeasurer
+import com.stephenmorris.recorder.engine.PatternEditing
 import com.stephenmorris.recorder.engine.SongEditing
 import com.stephenmorris.recorder.engine.SongModel
 import com.stephenmorris.recorder.engine.TapeControls
@@ -16,6 +17,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -36,6 +39,9 @@ object Recorder {
         val click: ClickSetting,
         val editing: SongEditing,
         val controls: TapeControls,
+        val patterns: PatternEditing,
+        /** The click on Pads (spec §3); changing it saves it. */
+        val clickOn: MutableStateFlow<Boolean>,
     )
 
     private val scope = MainScope()
@@ -77,8 +83,13 @@ object Recorder {
             val input = MicInput(rate)
             val transport = Transport(model, output, input, clips)
             val measurer = MixMeasurer(model, transport, clips, store)
-            model.clicks = clicks
-            Ready(model, transport, measurer, clips, store, click, SongEditing(model, transport, store), TapeControls(model, transport))
-        }.also { built -> scope.launch { TickLoop.run(built.transport, built.model) } }
+            Ready(
+                model, transport, measurer, clips, store, click, SongEditing(model, transport, store),
+                TapeControls(model, transport), PatternEditing(model, transport), MutableStateFlow(clicks),
+            )
+        }.also { built ->
+            scope.launch { TickLoop.run(built.transport, built.model) }
+            scope.launch { built.clickOn.drop(1).collect { click.save(it) } }
+        }
     }
 }
