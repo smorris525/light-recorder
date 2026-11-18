@@ -37,7 +37,13 @@ class PadsViewModel(context: SealedLightContext) : RecorderViewModel<PatternExit
         setShowing(showing)
     }
 
+    /** Leaving Pads, or opening Settings from it (spec §10, as Drums): an overdub ends; a count-in stops. */
+    fun leavePads() {
+        ready.value?.transport?.leavePads()
+    }
+
     override fun onCleared() {
+        leavePads()
         setShowing(false)
         super.onCleared()
     }

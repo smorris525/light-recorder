@@ -252,7 +252,8 @@ All three show the transport panel underneath.
 Drums' screens** (Drums §§8–14), with these differences:
 
 - **Opened** from a pattern's ✎ on Patterns; back from Pattern or Pads returns there (§6).
-- **▶ loops the pattern alone**, without the tape. ● on Pads overdubs into the pattern, quantised to its steps, as Drums.
+- **▶ loops the pattern alone**, without the tape. ● on Pads overdubs into the pattern, quantised to its steps, as Drums: from
+  stopped it counts in one bar first, and leaving Pads (step grid, Settings, back) ends the overdub.
   Changing a pattern never changes hits already on tape.
 - **Click** on Pads: on by default (§3).
 - **Pattern Actions:** the pattern's name as the title, with back. **Duplicate** copies it as `A 2` (the lowest free

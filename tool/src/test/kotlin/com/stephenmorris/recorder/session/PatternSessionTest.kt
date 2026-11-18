@@ -113,6 +113,9 @@ class PatternSessionTest {
         val session = session()
         transport.recordIntoPattern(session.id)
         fixture.advance(200)
+        assertTrue(transport.isPlaying.value)
+        assertEquals(1, transport.padCount.value)
+        fixture.advance(3_000)
         assertTrue(transport.isPadRecording.value)
     }
 

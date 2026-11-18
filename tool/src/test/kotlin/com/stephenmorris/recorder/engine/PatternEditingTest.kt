@@ -130,7 +130,9 @@ class PatternEditingTest {
     fun leavingKeepsAPadsOverdub() {
         editing.audition(a)
         transport.recordIntoPattern(a)
-        fixture.advance(500)
+        // Past the count-in: a bar of 4/4 at the default tempo, and then some.
+        fixture.advance(3_000)
+        assertTrue(transport.isPadRecording.value)
         transport.hit(Sound.SHAKER, Level.HIT)
 
         editing.leave()

@@ -59,7 +59,7 @@ import kotlinx.coroutines.launch
 /**
  * Live pads (spec §10, as Drums §10): eight pads filling the screen that sound on touch-down, with several fingers at
  * once, and, while ● overdubs, land on the pattern's nearest step. Settings, Click, Play, ● and back to the step grid
- * sit below.
+ * sit below. ● counts in a bar from stopped, as Drums does.
  */
 class PadsScreen(sealedActivity: SealedLightActivity, private val session: PatternSession) :
     LightScreen<PatternExit?, PadsViewModel>(sealedActivity) {
@@ -98,6 +98,7 @@ class PadsScreen(sealedActivity: SealedLightActivity, private val session: Patte
         val window by session.window.collectAsState()
         val step by session.playingStep.collectAsState()
         val isPadRecording by transport.isPadRecording.collectAsState()
+        val count by transport.padCount.collectAsState()
         val clickOn by viewModel.clickOn.collectAsState()
         val isPlaying by session.isPlaying.collectAsState()
         val playhead = session.playhead(step)
@@ -132,7 +133,10 @@ class PadsScreen(sealedActivity: SealedLightActivity, private val session: Patte
             items = listOf(
                 LightBarButton.LightIcon(
                     LightIcons.SETTINGS,
-                    onClick = { navigateTo({ SettingsScreen(it, session) }) },
+                    onClick = {
+                        viewModel.leavePads()
+                        navigateTo({ SettingsScreen(it, session) })
+                    },
                     contentDescription = "Settings",
                 ),
                 LightBarButton.Icon(
@@ -147,12 +151,19 @@ class PadsScreen(sealedActivity: SealedLightActivity, private val session: Patte
                     contentDescription = if (isPlaying) "Stop" else "Play",
                 ),
                 LightBarButton.Icon(
-                    RecorderIcons.record(underlined = isPadRecording),
+                    count?.let { RecorderIcons.countIn(it) } ?: RecorderIcons.record(underlined = isPadRecording),
                     onClick = { transport.recordIntoPattern(session.id) },
                     contentDescription = if (isPadRecording) "Stop recording" else "Record",
                     sizeUnits = RecorderIcons.UNDERLINABLE_SIZE_UNITS,
                 ),
-                LightBarButton.Icon(RecorderIcons.stepGrid(), onClick = { goBack(null) }, contentDescription = "Step grid"),
+                LightBarButton.Icon(
+                    RecorderIcons.stepGrid(),
+                    onClick = {
+                        viewModel.leavePads()
+                        goBack(null)
+                    },
+                    contentDescription = "Step grid",
+                ),
             ),
         )
     }

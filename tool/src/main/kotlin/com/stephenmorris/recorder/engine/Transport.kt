@@ -1,6 +1,9 @@
 package com.stephenmorris.recorder.engine
 
 import com.stephenmorris.recorder.audio.RecorderKit
+import com.stephenmorris.recorder.core.CountInSchedule
+import com.stephenmorris.recorder.core.RecordControl
+import com.stephenmorris.recorder.core.TakePhase
 import com.stephenmorris.recorder.core.Level
 import com.stephenmorris.recorder.core.Sound
 import com.stephenmorris.recorder.tape.MixEvent
@@ -95,6 +98,7 @@ class Transport(
     private val _liveTake = MutableStateFlow<LiveTake?>(null)
     private val _liveHits = MutableStateFlow<LiveHits?>(null)
     private val _isPadRecording = MutableStateFlow(false)
+    private val _padCount = MutableStateFlow<Int?>(null)
 
     /** The tape, or a pattern on its own, is playing (or counting down to a take). Keep the screen on meanwhile. */
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -120,6 +124,9 @@ class Transport(
     /** ● on Pads: overdubbing into the pattern looping alone. */
     val isPadRecording: StateFlow<Boolean> = _isPadRecording.asStateFlow()
 
+    /** The count reaching the speaker during a Pads count-in. */
+    val padCount: StateFlow<Int?> = _padCount.asStateFlow()
+
     /** The take being recorded, or the last one until the mix is measured with it in: its real level, for the lane. */
     val liveTake: StateFlow<LiveTake?> = _liveTake.asStateFlow()
 
@@ -136,6 +143,9 @@ class Transport(
 
     /** The pattern take or audition as it runs. */
     private var live: PatternTake? = null
+
+    /** The count-in before a Pads overdub, while it's under way. */
+    private var padCountIn: CountInSchedule? = null
 
     /** Where the playhead goes back to when the tape stops: where the last take of this playing began. */
     private var returnTime: Double? = null
@@ -346,6 +356,8 @@ class Transport(
         passes.clear()
         _isPlaying.value = false
         _isPadRecording.value = false
+        padCountIn = null
+        _padCount.value = null
         live = null
         takeEnd = null
         leadInEnd = null
@@ -581,12 +593,12 @@ class Transport(
     }
 
     /** Loops a pattern alone, without the tape, for its screens: on the unity bus, as it's no track's. */
-    private fun startAudition(pattern: UUID) {
+    private fun startAudition(pattern: UUID, startFrame: Long = mix.renderedFrames + frames(START_DELAY)) {
         live = PatternTake(
             sampleRate = sampleRate,
             pattern = pattern,
             startTime = 0.0,
-            startFrame = mix.renderedFrames + frames(START_DELAY),
+            startFrame = startFrame,
             outTime = null,
             track = null,
             records = false,
@@ -686,27 +698,68 @@ class Transport(
 
     // Pads
 
+    /** Where a Pads overdub is: counting in, recording, or neither. */
+    private val padPhase: TakePhase?
+        get() = when {
+            padCountIn != null -> TakePhase.COUNTING_IN
+            _isPadRecording.value -> TakePhase.RECORDING
+            else -> null
+        }
+
     /**
-     * ● on Pads: overdub on or off, into the pattern only. Unless the pattern is already looping alone, whatever's
-     * playing stops and the pattern starts. During a pattern take it does nothing, so the take isn't cut short.
+     * ● on Pads (spec §10, as Drums): with the pattern looping alone it overdubs from now on; otherwise whatever's
+     * playing stops, and a one-bar count-in, which always clicks, leads into the pattern and the overdub. ● during the
+     * count-in cancels it and stops; ● while overdubbing ends it and the pattern plays on. During a pattern take it does
+     * nothing, so the take isn't cut short.
      */
     fun recordIntoPattern(pattern: UUID) {
         if (live?.records == true) {
             return
         }
-        if (_isPadRecording.value) {
-            _isPadRecording.value = false
+        val isAuditioning = live?.let { !it.records && it.playing == pattern } == true
+        when (RecordControl.tapped(padPhase, isAuditioning)) {
+            RecordControl.Action.CANCEL_COUNT_IN -> stop()
+            RecordControl.Action.STOP_RECORDING -> _isPadRecording.value = false
+            RecordControl.Action.RECORD_NOW -> _isPadRecording.value = true
+            RecordControl.Action.COUNT_IN -> countIn(pattern)
+        }
+    }
+
+    private fun countIn(id: UUID) {
+        val pattern = model.pattern(id) ?: return
+        if (_isPlaying.value) {
+            stop()
+        }
+        prepare()
+        val layout = pattern.meter.layout
+        val schedule = CountInSchedule(layout, mix.renderedFrames + frames(START_DELAY), pattern.stepDuration * sampleRate)
+        // Count-ins always click, whatever the click switch says (spec §10).
+        for (click in schedule.clicks) {
+            mix.trigger(MixRenderer.UNITY_BUS, RecorderKit.clickVoice(click.kind), click.frame, 1f)
+        }
+        startAudition(id, schedule.endFrame)
+        padCountIn = schedule
+    }
+
+    /** Leaving Pads (spec §10, as Drums): an overdub ends and the pattern plays on; a count-in stops. */
+    fun leavePads() {
+        when (RecordControl.leavingPads(padPhase)) {
+            RecordControl.LeavingPads.STOP -> stop()
+            RecordControl.LeavingPads.END_TAKE -> _isPadRecording.value = false
+            RecordControl.LeavingPads.NOTHING -> Unit
+        }
+    }
+
+    /** Shows the count reaching the speaker, and turns the count-in into the overdub when the pattern starts. */
+    private fun updatePadCount(heard: Long) {
+        val schedule = padCountIn ?: return
+        if (heard >= schedule.endFrame) {
+            padCountIn = null
+            _padCount.value = null
+            _isPadRecording.value = true
             return
         }
-        val isAuditioning = live?.let { !it.records && it.playing == pattern } == true
-        if (!isAuditioning) {
-            if (_isPlaying.value) {
-                stop()
-            }
-            prepare()
-            startAudition(pattern)
-        }
-        _isPadRecording.value = live?.records == false
+        _padCount.value = schedule.number(heard)
     }
 
     /** A pad tap: sounds at once, on the unity bus, and, while overdubbing, lands on the pattern's nearest step. */
@@ -714,10 +767,22 @@ class Transport(
         val gain = if (level == Level.ACCENT) level.gain else PAD_GAIN
         mix.trigger(MixRenderer.UNITY_BUS, RecorderKit.voice(sound), mix.renderedFrames, gain)
         val current = live ?: return
-        if (!_isPadRecording.value || current.records) {
+        if (current.records) {
             return
         }
-        val step = current.nearestStep(heardFrame) ?: return
+        val schedule = padCountIn
+        val step = if (schedule != null) {
+            // In the count-in's last half step, an early downbeat lands on the pattern's first step.
+            val halfStep = frames(model.pattern(current.playing)?.stepDuration ?: return) / 2
+            if (heardFrame < schedule.endFrame - halfStep) {
+                return
+            }
+            0
+        } else if (_isPadRecording.value) {
+            current.nearestStep(heardFrame) ?: return
+        } else {
+            return
+        }
         model.updatePattern(current.playing) { pattern ->
             pattern.steps.recordingHit(sound, step, level)?.let { pattern.copy(steps = it) } ?: pattern
         }
@@ -763,6 +828,7 @@ class Transport(
         }
         updatePlayhead(heard)
         updateCount(heard)
+        updatePadCount(heard)
         updateTake(heard)
         finishPatternTake(heard)
         drainCapture()
