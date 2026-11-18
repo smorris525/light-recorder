@@ -1,129 +1,83 @@
 package com.stephenmorris.recorder.library
 
-import android.Manifest
-import androidx.compose.foundation.background
+import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
-import com.stephenmorris.recorder.engine.ExportName
-import com.stephenmorris.recorder.platform.M4aEncoder
+import com.stephenmorris.recorder.platform.Recorder
 import com.stephenmorris.recorder.platform.RecorderViewModel
+import com.stephenmorris.recorder.song.SongScreen
 import com.stephenmorris.recorder.tape.Song
-import com.stephenmorris.recorder.tape.TimeText
-import com.stephenmorris.recorder.tape.uniqueName
+import com.stephenmorris.recorder.ui.DeleteConfirmScreen
+import com.stephenmorris.recorder.ui.ScreenFrame
 import com.thelightphone.sdk.InitialScreen
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SealedLightContext
-import com.thelightphone.sdk.rememberPermissionRequestLauncher
+import com.thelightphone.sdk.ui.LightBarButton
+import com.thelightphone.sdk.ui.LightBottomBar
+import com.thelightphone.sdk.ui.LightIcon
+import com.thelightphone.sdk.ui.LightIcons
+import com.thelightphone.sdk.ui.LightScrollView
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
-import com.thelightphone.sdk.ui.LightTheme
-import com.thelightphone.sdk.ui.LightThemeController
-import com.thelightphone.sdk.ui.LightThemeTokens
+import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
-import java.io.File
+import java.util.UUID
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
-/**
- * The library's view model. Until the library has its songs, it drives a temporary engine check: a new song, arming, ●, ▶/■ and Export, with a status line.
- */
-class LibraryViewModel(private val context: SealedLightContext) : RecorderViewModel<Unit>(context) {
-    val message = MutableStateFlow("")
+/** The Library's view model: edit mode, and the work that must finish after the screen moves on. */
+class LibraryViewModel(context: SealedLightContext) : RecorderViewModel<Unit>(context) {
+    val isEditing = MutableStateFlow(false)
 
-    fun newSong() {
-        val ready = ready.value ?: return
-        val model = ready.model
-        val song = Song.new(uniqueName("New Song", model.songs.value.map { it.name }))
-        model.replaceSongs(model.songs.value + song)
-        model.open(song.id)
-    }
+    val scrollState = ScrollState(0)
 
-    /** Opens the newest song, if there is one and none is open. */
-    fun openLatest() {
-        val model = ready.value?.model ?: return
-        if (!model.isSongOpen) {
-            model.songs.value.lastOrNull()?.let { model.open(it.id) }
-        }
-    }
-
-    /**
-     * Arms Track [number]. A Microphone track whose mic won't open asks for it through the SDK (which needs the Light
-     * server); grant it with `adb shell pm grant` on an emulator without one.
-     */
-    fun arm(number: Int, askForMic: () -> Unit) {
-        val ready = ready.value ?: return
-        val track = ready.model.song.tracks.getOrNull(number - 1) ?: return
-        ready.transport.toggleArm(track.id)
-        if (number == 2 && ready.transport.isMicRefused.value) {
-            message.value = "microphone not allowed: asking"
-            askForMic()
-        }
-    }
-
-    fun record() = ready.value?.transport?.record()
-
-    fun togglePlay() = ready.value?.transport?.togglePlay()
-
-    fun export() {
+    /** Opens a song once its recordings are read off the main thread, then [then]. A tap while one opens is ignored. */
+    fun open(id: UUID, then: () -> Unit) {
         val ready = ready.value ?: return
         viewModelScope.launch {
-            message.value = "exporting"
-            val job = ready.measurer.mixdown { } ?: run {
-                message.value = "nothing to export"
-                return@launch
+            ready.model.openPreloaded(id) { ready.clips.preload(it, Dispatchers.IO) }
+            if (ready.model.openSongId.value == id) {
+                then()
             }
-            val name = "exports/${ExportName.fileName(ready.model.song.name)}.m4a"
-            val done = withContext(Dispatchers.IO) {
-                val temp = File(context.filesDir, "Export/export.m4a")
-                val written = M4aEncoder.write(job, temp, isCancelled = { false }, progress = { })
-                if (written) {
-                    context.fileShare.writeStream(name) { out -> temp.inputStream().use { it.copyTo(out) } }
-                    temp.delete()
-                }
-                written
-            }
-            message.value = if (done) "exported $name" else "export failed"
         }
     }
 
-    /** The playhead, the count, the mic's level and each track's content, for the status line. */
-    fun status(): String {
-        val ready = ready.value ?: return "starting"
-        val model = ready.model
-        if (!model.isSongOpen) {
-            return "no song open (${model.songs.value.size} saved)"
+    /** Deletes a song; deleting the last leaves edit mode. */
+    fun delete(id: UUID) {
+        val ready = ready.value ?: return
+        viewModelScope.launch {
+            ready.editing.delete(id)
+            if (ready.model.songs.value.isEmpty()) {
+                isEditing.value = false
+            }
         }
-        val transport = ready.transport
-        val tracks = model.song.tracks.joinToString("  ") { track ->
-            val armed = if (model.arming.value.isArmed(track.id)) "●" else ""
-            "${track.number}$armed:${track.spans.size}s/${track.hits.size}h"
-        }
-        val count = transport.countNumber.value?.let { " count $it" } ?: ""
-        val level = (transport.inputLevel() * 100).toInt()
-        return "${model.song.name} ${TimeText.readout(model.playhead.value)}$count in $level%\n$tracks"
     }
 }
 
-/** The first screen: the song library. For now, an engine check. */
+/** The first screen: the songs, oldest first, with EDIT and ⊕ underneath (spec §7), as Drums' library. */
 @InitialScreen
-class LibraryScreen(sealedActivity: SealedLightActivity) :
-    LightScreen<Unit, LibraryViewModel>(sealedActivity) {
+class LibraryScreen(sealedActivity: SealedLightActivity) : LightScreen<Unit, LibraryViewModel>(sealedActivity) {
 
     override val viewModelClass: Class<LibraryViewModel>
         get() = LibraryViewModel::class.java
@@ -132,46 +86,112 @@ class LibraryScreen(sealedActivity: SealedLightActivity) :
 
     @Composable
     override fun Content() {
-        val themeColors by LightThemeController.colors.collectAsState()
-        val message by viewModel.message.collectAsState()
-        val launcher = rememberPermissionRequestLauncher(Manifest.permission.RECORD_AUDIO)
-        var status by remember { mutableStateOf("") }
-        LaunchedEffect(Unit) {
-            while (true) {
-                status = viewModel.status()
-                delay(100)
-            }
-        }
-
-        LightTheme(colors = themeColors) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(LightThemeTokens.colors.background)
-                    .padding(16.dp),
-            ) {
-                Button("NEW SONG") { viewModel.newSong() }
-                Button("OPEN LATEST") { viewModel.openLatest() }
-                Button("ARM 2 (MIC)") { viewModel.arm(2) { launcher?.launch() } }
-                Button("ARM 1 (DRUMS)") { viewModel.arm(1) { } }
-                Button("● RECORD") { viewModel.record() }
-                Button("▶ / ■") { viewModel.togglePlay() }
-                Button("EXPORT") { viewModel.export() }
-                LightText(text = status, variant = LightTextVariant.Detail)
-                LightText(text = message, variant = LightTextVariant.Detail)
-            }
+        val ready by viewModel.ready.collectAsState()
+        ScreenFrame {
+            ready?.let { Library(it) }
         }
     }
+
+    private fun open(id: UUID) = viewModel.open(id) { navigateTo({ SongScreen(it) }) }
 
     @Composable
-    private fun Button(label: String, onClick: () -> Unit) {
-        LightText(
-            text = label,
-            variant = LightTextVariant.Copy,
-            modifier = Modifier
-                .fillMaxWidth()
-                .lightClickable(onClick = onClick)
-                .padding(vertical = 6.dp),
+    private fun Library(ready: Recorder.Ready) {
+        val songs by ready.model.songs.collectAsState()
+        val isEditing by viewModel.isEditing.collectAsState()
+        val isOpening by ready.model.isOpening.collectAsState()
+
+        fun confirmDelete(song: Song) = navigateTo({ DeleteConfirmScreen(it, song.name) }) { confirmed ->
+            if (confirmed) {
+                viewModel.delete(song.id)
+            }
+        }
+
+        val add = LightBarButton.LightIcon(
+            LightIcons.ADD,
+            onClick = {
+                viewModel.isEditing.value = false
+                open(ready.editing.newSong())
+            },
+            contentDescription = "New song",
         )
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                LightScrollView(
+                    scrollState = viewModel.scrollState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(start = 1f.gridUnitsAsDp(), end = 1f.gridUnitsAsDp(), top = 1f.gridUnitsAsDp()),
+                ) {
+                    for (song in songs) {
+                        SongRow(
+                            song = song,
+                            isEditing = isEditing,
+                            onOpen = { if (!isOpening) open(song.id) },
+                            onDelete = { confirmDelete(song) },
+                        )
+                    }
+                    Spacer(Modifier.height(1f.gridUnitsAsDp()))
+                }
+                LightBottomBar(
+                    items = if (songs.isEmpty()) {
+                        listOf(null, add, null)
+                    } else {
+                        listOf(
+                            LightBarButton.Text(if (isEditing) "DONE" else "EDIT") {
+                                viewModel.isEditing.value = !isEditing
+                            },
+                            null,
+                            add,
+                        )
+                    },
+                )
+            }
+            // Centred on the whole screen, the bar's room included; not tappable.
+            if (songs.isEmpty()) {
+                LightText(
+                    "tap below to start a song",
+                    LightTextVariant.Paragraph,
+                    align = TextAlign.Center,
+                    modifier = Modifier.align(Alignment.Center).padding(horizontal = 40.dp),
+                )
+            }
+        }
     }
 }
+
+/**
+ * A song: its name over its length. In edit mode a delete button sits before it, and tapping the row does nothing.
+ * The text sets the row's height, so edit mode only moves it over.
+ */
+@Composable
+private fun SongRow(song: Song, isEditing: Boolean, onOpen: () -> Unit, onDelete: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(IntrinsicSize.Min)
+            .lightClickable(enabled = !isEditing, onClickLabel = "Open ${song.name}", onClick = onOpen)
+            .padding(vertical = 0.5f.gridUnitsAsDp()),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(0.8f.gridUnitsAsDp()),
+    ) {
+        if (isEditing) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(DELETE_SIZE_UNITS.gridUnitsAsDp())
+                    .lightClickable(onClickLabel = "Delete ${song.name}", onClick = onDelete),
+                contentAlignment = Alignment.Center,
+            ) {
+                LightIcon(LightIcons.DELETE, size = DELETE_SIZE_UNITS, contentDescription = "Delete ${song.name}")
+            }
+        }
+        Column {
+            LightText(song.name, LightTextVariant.Copy, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            LightText(song.meta, LightTextVariant.Detail, maxLines = 1)
+        }
+    }
+}
+
+/** The delete button's size, in grid units: about the name's height. */
+private const val DELETE_SIZE_UNITS = 1.25f
