@@ -1,6 +1,8 @@
 package com.stephenmorris.recorder.engine
 
 import com.stephenmorris.recorder.audio.RecorderKit
+import com.stephenmorris.recorder.core.Level
+import com.stephenmorris.recorder.core.Sound
 import com.stephenmorris.recorder.tape.MixEvent
 import com.stephenmorris.recorder.tape.MixRenderer
 import com.stephenmorris.recorder.tape.PassBounds
@@ -11,6 +13,7 @@ import com.stephenmorris.recorder.tape.Song
 import com.stephenmorris.recorder.tape.Span
 import com.stephenmorris.recorder.tape.TakeLevels
 import com.stephenmorris.recorder.tape.TapeScheduler
+import com.stephenmorris.recorder.tape.HitLevels
 import com.stephenmorris.recorder.tape.fadeEdges
 import com.stephenmorris.recorder.tape.gains
 import java.util.UUID
@@ -48,6 +51,27 @@ data class LiveTake(
 )
 
 /**
+ * A pattern take's hits, drawn on the lane from the moment they're scheduled until the mix is measured with them in.
+ * Not a data class: [levels] changes in place, and each new value is a new drawing.
+ */
+class LiveHits(
+    val track: UUID,
+    val levels: HitLevels,
+    /** Whether the take has ended and its hits are on its track. */
+    val isWritten: Boolean = false,
+)
+
+/** What the screens show of a pattern take or audition, as it was when it last changed. */
+data class PatternTakeState(
+    val playing: UUID,
+    val queued: UUID?,
+    val records: Boolean,
+    val track: UUID?,
+    val endFrame: Long?,
+    val hitCount: Int,
+)
+
+/**
  * Plays the tape and records takes (spec §4, §5). The tick loop calls [tick] every 20 ms,
  * which keeps events placed [LOOKAHEAD] ahead of the render clock and reads the clock back for the playhead.
  *
@@ -67,8 +91,10 @@ class Transport(
     private val _isMicRefused = MutableStateFlow(false)
     private val _take = MutableStateFlow<AudioTake?>(null)
     private val _countNumber = MutableStateFlow<Int?>(null)
-    private val _patternTake = MutableStateFlow<PatternTake?>(null)
+    private val _patternTake = MutableStateFlow<PatternTakeState?>(null)
     private val _liveTake = MutableStateFlow<LiveTake?>(null)
+    private val _liveHits = MutableStateFlow<LiveHits?>(null)
+    private val _isPadRecording = MutableStateFlow(false)
 
     /** The tape, or a pattern on its own, is playing (or counting down to a take). Keep the screen on meanwhile. */
     val isPlaying: StateFlow<Boolean> = _isPlaying.asStateFlow()
@@ -86,13 +112,22 @@ class Transport(
     val countNumber: StateFlow<Int?> = _countNumber.asStateFlow()
 
     /** The pattern take or audition under way, for the screens; updated when what they show changes, not every tick. */
-    val patternTake: StateFlow<PatternTake?> = _patternTake.asStateFlow()
+    val patternTake: StateFlow<PatternTakeState?> = _patternTake.asStateFlow()
+
+    /** The pattern take being recorded, or the last one until the mix is measured with it in: its hits' level. */
+    val liveHits: StateFlow<LiveHits?> = _liveHits.asStateFlow()
+
+    /** ● on Pads: overdubbing into the pattern looping alone. */
+    val isPadRecording: StateFlow<Boolean> = _isPadRecording.asStateFlow()
 
     /** The take being recorded, or the last one until the mix is measured with it in: its real level, for the lane. */
     val liveTake: StateFlow<LiveTake?> = _liveTake.asStateFlow()
 
     val sampleRate = output.sampleRate.toDouble()
     private val mix = output.mix
+
+    /** The kit's voices, for measuring a pattern take's hits as the mix plays them. Rendered once (spec §6). */
+    private val kitVoices = RecorderKit.voices(sampleRate)
 
     private var scheduler: TapeScheduler? = null
 
@@ -225,9 +260,14 @@ class Transport(
             stop()
             return
         }
-        model.isFollowing = true
         prepare()
-        playTape(Punch.playStart(model.song, model.playhead.value))
+        val audition = model.auditionPattern
+        if (audition != null) {
+            startAudition(audition)
+        } else {
+            model.isFollowing = true
+            playTape(Punch.playStart(model.song, model.playhead.value))
+        }
     }
 
     /**
@@ -273,9 +313,11 @@ class Transport(
         } else if (current != null) {
             abandonTake()
         }
+        keepHeardHits()
         scheduler = null
         passes.clear()
         _isPlaying.value = false
+        _isPadRecording.value = false
         live = null
         takeEnd = null
         leadInEnd = null
@@ -486,8 +528,162 @@ class Transport(
     private fun hasRecordings(track: UUID, time: Double): Boolean =
         model.track(track)?.spans?.any { it.end > time } == true
 
+    // Pattern takes
+
+    /**
+     * Selects one of the song's patterns; during a pattern take it plays once the current loop ends (or, in the lead-in,
+     * the take starts with it).
+     */
+    fun select(pattern: UUID) {
+        model.updateSong { it.copy(selectedPattern = pattern) }
+        val current = live
+        if (current != null && current.records && current.endFrame == null) {
+            current.queue(pattern, heardFrame)
+            publishPatternTake()
+        }
+    }
+
+    /** Loops a pattern alone, without the tape, for its screens: on the unity bus, as it's no track's. */
+    private fun startAudition(pattern: UUID) {
+        live = PatternTake(
+            sampleRate = sampleRate,
+            pattern = pattern,
+            startTime = 0.0,
+            startFrame = mix.renderedFrames + frames(START_DELAY),
+            outTime = null,
+            track = null,
+            records = false,
+        )
+        _isPlaying.value = true
+        publishPatternTake()
+    }
+
+    /**
+     * Writes a finished pattern take onto its track once its end has been heard, so the lane doesn't change early. If
+     * the tape plays on, the track's recordings past the take, left out while it ran, play again.
+     */
+    private fun finishPatternTake(heard: Long) {
+        val current = live ?: return
+        val endFrame = current.endFrame ?: return
+        val endTime = current.endTime ?: return
+        val track = current.track ?: return
+        if (!current.records || heard < endFrame) {
+            return
+        }
+        if (endTime > current.startTime) {
+            model.updateTrack(track) { it.recording(current.hits, current.startTime..<endTime) }
+        }
+        live = null
+        publishPatternTake()
+        if (hasRecordings(track, endTime)) {
+            playClipsAgain()
+        }
+    }
+
+    /** When playback stops in the middle of a pattern take, what was heard of it stays. */
+    private fun keepHeardHits() {
+        val current = live ?: return
+        val track = current.track ?: return
+        if (!current.records) {
+            return
+        }
+        val heard = current.startTime + (heardFrame - current.startFrame) / sampleRate
+        val end = minOf(current.endTime ?: Double.POSITIVE_INFINITY, heard)
+        if (end <= current.startTime) {
+            return
+        }
+        model.updateTrack(track) { it.recording(current.hits.filter { hit -> hit.time < end }, current.startTime..<end) }
+    }
+
     private fun publishPatternTake() {
-        _patternTake.value = live
+        val current = live
+        val state = current?.let {
+            PatternTakeState(it.playing, it.queued, it.records, it.track, it.endFrame, it.hits.size)
+        }
+        if (state != _patternTake.value) {
+            _patternTake.value = state
+            publishLiveHits()
+        }
+    }
+
+    /**
+     * The lane draws a pattern take's hits as they're played, up to [horizon] (the frame the take is scheduled to; by
+     * default, as far as the next tick will schedule it). Once it ends, what landed on its track stays drawn until the
+     * mix is measured with it in; what didn't (a take abandoned in its lead-in) goes.
+     */
+    private fun publishLiveHits(horizon: Long? = null) {
+        val current = live
+        val track = current?.track
+        val shown = _liveHits.value
+        if (current != null && current.records && track != null) {
+            // From the take's level so far, so each tick plays only the moment since the last.
+            val levels = shown?.takeIf { it.track == track && !it.isWritten }?.levels ?: HitLevels(kitVoices, sampleRate)
+            val frame = horizon ?: (mix.renderedFrames + frames(LOOKAHEAD))
+            levels.play(current.hits, current.startTime + (frame - current.startFrame) / sampleRate)
+            _liveHits.value = LiveHits(track, levels)
+        } else if (shown != null && !shown.isWritten) {
+            val recorded = model.track(shown.track)?.hits.orEmpty().toHashSet()
+            shown.levels.hits = shown.levels.hits.filter { it in recorded }
+            _liveHits.value = if (shown.levels.hits.isEmpty()) null else LiveHits(shown.track, shown.levels, isWritten = true)
+        }
+    }
+
+    /**
+     * Once the mix has been measured from [measured], drops the live drawings it now holds: the finished audio take, and
+     * a written pattern take whose last hit is on its track.
+     */
+    fun clearLive(measured: Song) {
+        val take = _liveTake.value
+        val clip = take?.clip
+        if (clip != null && measured.tracks.any { track -> track.spans.any { it.clip == clip } }) {
+            _liveTake.value = null
+        }
+        val hits = _liveHits.value
+        val last = hits?.levels?.hits?.lastOrNull()
+        if (hits != null && hits.isWritten && last != null &&
+            measured.tracks.any { it.id == hits.track && last in it.hits }
+        ) {
+            _liveHits.value = null
+        }
+    }
+
+    // Pads
+
+    /**
+     * ● on Pads: overdub on or off, into the pattern only. Unless the pattern is already looping alone, whatever's
+     * playing stops and the pattern starts. During a pattern take it does nothing, so the take isn't cut short.
+     */
+    fun recordIntoPattern(pattern: UUID) {
+        if (live?.records == true) {
+            return
+        }
+        if (_isPadRecording.value) {
+            _isPadRecording.value = false
+            return
+        }
+        val isAuditioning = live?.let { !it.records && it.playing == pattern } == true
+        if (!isAuditioning) {
+            if (_isPlaying.value) {
+                stop()
+            }
+            prepare()
+            startAudition(pattern)
+        }
+        _isPadRecording.value = live?.records == false
+    }
+
+    /** A pad tap: sounds at once, on the unity bus, and, while overdubbing, lands on the pattern's nearest step. */
+    fun hit(sound: Sound, level: Level) {
+        val gain = if (level == Level.ACCENT) level.gain else PAD_GAIN
+        mix.trigger(MixRenderer.UNITY_BUS, RecorderKit.voice(sound), mix.renderedFrames, gain)
+        val current = live ?: return
+        if (!_isPadRecording.value || current.records) {
+            return
+        }
+        val step = current.nearestStep(heardFrame) ?: return
+        model.updatePattern(current.playing) { pattern ->
+            pattern.steps.recordingHit(sound, step, level)?.let { pattern.copy(steps = it) } ?: pattern
+        }
     }
 
     // The loop
@@ -502,6 +698,18 @@ class Transport(
         val heard = now - output.latencyFrames
         val horizon = now + frames(LOOKAHEAD)
 
+        val audition = live
+        if (audition != null && !audition.records && model.auditionPattern != audition.playing) {
+            // The pattern's screens are gone.
+            stop()
+        }
+        live?.let { current ->
+            handle(current.advance(horizon, now, model.song.patterns, model.clicks))
+            publishPatternTake()
+            if (current.records) {
+                publishLiveHits(horizon)
+            }
+        }
         if (_isPlaying.value && scheduler != null) {
             scheduleTape(now, horizon)
             val finish = scheduler?.finishFrame
@@ -519,6 +727,7 @@ class Transport(
         updatePlayhead(heard)
         updateCount(heard)
         updateTake(heard)
+        finishPatternTake(heard)
         drainCapture()
         settleTakes()
         if (input.meter.takeClipped()) {
@@ -597,6 +806,10 @@ class Transport(
     }
 
     private fun updatePlayhead(heard: Long) {
+        val step = live?.position(heard)?.let { (pattern, step) -> PatternStep(pattern, step) }
+        if (model.playingStep.value != step) {
+            model.playingStep.value = step
+        }
         if (!_isPlaying.value || scheduler == null) {
             return
         }
@@ -736,6 +949,9 @@ class Transport(
 
         /** Before the first event, so that it isn't squeezed into a render that's already under way. */
         const val START_DELAY = 0.05
+
+        /** A pad's normal hit; an accent plays at its own gain. */
+        const val PAD_GAIN = 0.85f
 
         /** Each end of a take fades over this, so replacing part of a track never clicks. */
         const val FADE_SECONDS = 0.005
