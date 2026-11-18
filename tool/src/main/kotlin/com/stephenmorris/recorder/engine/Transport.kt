@@ -510,6 +510,15 @@ class Transport(
         }
     }
 
+    /** After a bounce: if the tape plays, the bounce plays in place of its sources from here on. */
+    fun replayClips() = playClipsAgain()
+
+    /** Forgets the live drawings of the last takes, which a bounce may have taken away; the measured mix draws it. */
+    fun dropLive() {
+        _liveTake.value = null
+        _liveHits.value = null
+    }
+
     /**
      * While the tape plays, its recordings from here on, scheduled again as the song and the takes now stand: the
      * scheduler trims a track's recordings under a take only as it schedules them.
