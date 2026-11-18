@@ -2,6 +2,7 @@ package com.stephenmorris.recorder.ui
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -130,6 +131,57 @@ object RecorderIcons {
         return remember(color, underlined) {
             DrawnIcon(24f, color, underlinable = true, underlined = underlined) { tint ->
                 drawCircle(tint, 11f, Offset(12f, 12f))
+            }
+        }
+    }
+
+    /** Live pads: 2 x 2 rounded squares out to the edges of a 24 grid, as Drums'. */
+    @Composable
+    fun pads(): Painter {
+        val color = tint(false)
+        return remember(color) {
+            DrawnIcon(24f, color) { tint ->
+                for ((x, y) in listOf(0.9f to 0.9f, 13.5f to 0.9f, 0.9f to 13.5f, 13.5f to 13.5f)) {
+                    drawRoundRect(tint, Offset(x, y), Size(9.6f, 9.6f), CornerRadius(2.5f), style = Stroke(1.8f))
+                }
+            }
+        }
+    }
+
+    /** The step grid: the SDK dialpad's dots, 4 x 4, on a 40 grid, as Drums'. */
+    @Composable
+    fun stepGrid(): Painter {
+        val color = tint(false)
+        return remember(color) {
+            DrawnIcon(40f, color) { tint ->
+                val diameter = 6f
+                val pitch = (40f - diameter) / 3
+                for (row in 0 until 4) {
+                    for (column in 0 until 4) {
+                        drawCircle(tint, diameter / 2, Offset(column * pitch + diameter / 2, row * pitch + diameter / 2))
+                    }
+                }
+            }
+        }
+    }
+
+    /** The click, Drums': a tapering case, its arm swung out to the right, underlined while on. */
+    @Composable
+    fun metronome(underlined: Boolean): Painter {
+        val color = tint(false)
+        return remember(color, underlined) {
+            DrawnIcon(40f, color, underlinable = true, underlined = underlined) { tint ->
+                val case = Path().apply {
+                    moveTo(11.5f, 1.5f)
+                    lineTo(18.5f, 1.5f)
+                    lineTo(28f, 38.5f)
+                    lineTo(2f, 38.5f)
+                    close()
+                    moveTo(11f, 31f)
+                    lineTo(33f, 7f)
+                }
+                drawPath(case, tint, style = Stroke(3f))
+                drawCircle(tint, 5f, Offset(33f, 7f))
             }
         }
     }

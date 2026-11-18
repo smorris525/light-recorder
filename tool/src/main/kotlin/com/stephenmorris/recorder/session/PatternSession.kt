@@ -41,6 +41,12 @@ class PatternSession(
     /** The last step heard while this pattern played: what a bar dot compares against. */
     private var lastPlayhead: Int? = null
 
+    /** The transport's pattern take, for the screens to collect: [isPlaying] reads it. */
+    val patternTake: StateFlow<PatternTakeState?> = transport.patternTake
+
+    /** The step being heard, for the screens to collect: [playhead] reads it. */
+    val playingStep: StateFlow<PatternStep?> = model.playingStep
+
     /** Whether [take] is this pattern looping alone (not a take on the tape). */
     fun isPlaying(take: PatternTakeState?): Boolean = take != null && !take.records && take.playing == id
 
@@ -82,6 +88,9 @@ class PatternSession(
         firstBar = follow.window(_window.value, step).firstBar
         updateWindow()
     }
+
+    /** A rename: trimmed; an empty name keeps the old one. */
+    fun rename(typed: String) = edit { editing.rename(id, typed) }
 
     fun tap(sound: Sound, step: Int) = edit { editing.tap(id, sound, step) }
 

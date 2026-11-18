@@ -23,6 +23,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.stephenmorris.recorder.core.PatternText
+import com.stephenmorris.recorder.pattern.PatternExit
+import com.stephenmorris.recorder.pattern.PatternScreen
 import com.stephenmorris.recorder.platform.Recorder
 import com.stephenmorris.recorder.song.TransportPanel
 import com.stephenmorris.recorder.song.asGridUnits
@@ -63,6 +65,15 @@ class PatternsScreen(sealedActivity: SealedLightActivity) : LightScreen<Unit, Pa
         }
     }
 
+    /** Opens a pattern's screens; a duplicate opens in their place, and a delete lands here. */
+    private fun openPattern(id: java.util.UUID) {
+        navigateTo({ PatternScreen(it, id) }) { exit ->
+            if (exit is PatternExit.Open) {
+                openPattern(exit.id)
+            }
+        }
+    }
+
     @Composable
     private fun androidx.compose.foundation.layout.ColumnScope.Patterns(ready: Recorder.Ready) {
         ready.model.songs.collectAsState().value
@@ -85,8 +96,7 @@ class PatternsScreen(sealedActivity: SealedLightActivity) : LightScreen<Unit, Pa
                         isSelected = song.selectedPattern == pattern.id,
                         isQueued = patternTake?.records == true && patternTake?.queued == pattern.id,
                         onSelect = { ready.transport.select(pattern.id) },
-                        // The pattern's screens open here later.
-                        onOpen = { },
+                        onOpen = { openPattern(pattern.id) },
                     )
                 }
                 LightText(
