@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewModelScope
+import com.stephenmorris.recorder.notes.NotesScreen
 import com.stephenmorris.recorder.platform.Recorder
 import com.stephenmorris.recorder.platform.RecorderViewModel
 import com.stephenmorris.recorder.ui.DeleteConfirmScreen
@@ -69,7 +70,7 @@ class SongActionsScreen(sealedActivity: SealedLightActivity) :
         val song = ready.model.song
         LightTopBar(leftButton = backButton { goBack() }, center = LightTopBarCenter.Text(song.name))
         Column(modifier = Modifier.fillMaxWidth().padding(top = 12.dp)) {
-            ActionRow("Notes") { }
+            ActionRow("Notes") { navigateTo({ NotesScreen(it) }) }
             Spacer(Modifier.height(24.dp))
             if (!isTakeUnderWay) {
                 ActionRow("Duplicate") {

@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.stephenmorris.recorder.panel.SliderMath
 import com.stephenmorris.recorder.platform.Recorder
 import com.stephenmorris.recorder.tape.Track
+import com.stephenmorris.recorder.ui.scaled
 import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.gridUnitsAsDp
 import kotlin.math.roundToInt
@@ -66,7 +67,7 @@ fun LevelMeter(ready: Recorder.Ready, track: Track, modifier: Modifier = Modifie
             var textHeight by remember { mutableIntStateOf(0) }
             BasicText(
                 "CLIP",
-                style = LightThemeTokens.typography.superfine.copy(color = colors.content, fontWeight = FontWeight.Medium),
+                style = LightThemeTokens.typography.superfine.scaled().copy(color = colors.content, fontWeight = FontWeight.Medium),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .onSizeChanged { textHeight = it.height }

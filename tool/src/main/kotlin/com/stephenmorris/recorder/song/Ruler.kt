@@ -31,6 +31,7 @@ import com.stephenmorris.recorder.panel.PointBrackets
 import com.stephenmorris.recorder.panel.RulerMarks
 import com.stephenmorris.recorder.panel.TapeFrame
 import com.stephenmorris.recorder.platform.Recorder
+import com.stephenmorris.recorder.ui.scaled
 import com.thelightphone.sdk.ui.LocalHapticsEnabled
 import com.thelightphone.sdk.ui.LightThemeTokens
 import kotlin.math.abs
@@ -72,7 +73,7 @@ fun Ruler(ready: Recorder.Ready) {
     val colors = LightThemeTokens.colors
     val density = LocalDensity.current.density
     val measurer = rememberTextMeasurer()
-    val style = LightThemeTokens.typography.superfine.copy(color = colors.content, fontFeatureSettings = "tnum")
+    val style = LightThemeTokens.typography.superfine.scaled().copy(color = colors.content, fontFeatureSettings = "tnum")
     val playheadStyle = style.copy(fontWeight = FontWeight.Medium)
     val width = remember { mutableDoubleStateOf(1.0) }
     val fingerX = remember { mutableDoubleStateOf(0.0) }
