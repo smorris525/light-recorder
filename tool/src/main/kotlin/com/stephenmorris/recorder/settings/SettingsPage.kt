@@ -24,8 +24,7 @@ import com.thelightphone.sdk.ui.LightTopBarCenter
 @Composable
 fun SettingsPage(title: String, session: PatternSession, onBack: () -> Unit, content: @Composable BoxScope.() -> Unit) {
     val themeColors by LightThemeController.colors.collectAsState()
-    val take by session.patternTake.collectAsState()
-    val isPlaying = session.isPlaying(take)
+    val isPlaying by session.isPlaying.collectAsState()
     LightTheme(colors = themeColors) {
         Column(
             modifier = Modifier

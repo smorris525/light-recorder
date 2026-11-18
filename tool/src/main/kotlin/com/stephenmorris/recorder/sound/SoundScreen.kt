@@ -50,9 +50,8 @@ class SoundScreen(sealedActivity: SealedLightActivity, private val session: Patt
         val themeColors by LightThemeController.colors.collectAsState()
         val pattern by session.pattern.collectAsState()
         val window by session.window.collectAsState()
-        val take by session.patternTake.collectAsState()
         val step by session.playingStep.collectAsState()
-        val isPlaying = session.isPlaying(take)
+        val isPlaying by session.isPlaying.collectAsState()
         val playhead = session.playhead(step)
         LightTheme(colors = themeColors) {
             Column(

@@ -52,8 +52,8 @@ class SongModel(private val store: SongStore, delayer: Delayer) {
     /** The pattern whose screens are on show, which play loops on its own; set by those screens. */
     var auditionPattern: UUID? = null
 
-    /** Whether the Pads screen clicks (spec §3). */
-    var clicks = true
+    /** Whether a pattern playing alone clicks: only while Pads shows with the click on (spec §3), so off to start. */
+    var clicks = false
 
     /** The view pages along with the playhead during playback. */
     var isFollowing = false

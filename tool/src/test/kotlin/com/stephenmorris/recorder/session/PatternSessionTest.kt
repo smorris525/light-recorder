@@ -39,7 +39,7 @@ class PatternSessionTest {
         session.togglePlay()
         fixture.advance(300)
 
-        assertTrue(session.isPlaying(transport.patternTake.value))
+        assertTrue(session.isPlaying.value)
         assertEquals(a, model.auditionPattern)
         session.togglePlay()
         assertFalse(transport.isPlaying.value)
@@ -107,12 +107,21 @@ class PatternSessionTest {
         assertNull(session.playhead(null))
     }
 
+
     @Test
-    fun aPatternTakeOnTapeIsntThisScreensPlaying() {
+    fun padsRecordWithoutPressingPlayFirst() {
         val session = session()
-        transport.toggleArm(fixture.track(0).id)
-        transport.record()
-        fixture.advance(300)
-        assertFalse(session.isPlaying(transport.patternTake.value))
+        transport.recordIntoPattern(session.id)
+        fixture.advance(200)
+        assertTrue(transport.isPadRecording.value)
+    }
+
+    @Test
+    fun playShowsStopWhileTheTapePlays() {
+        val session = session()
+        model.auditionPattern = null
+        transport.togglePlay()
+        fixture.advance(200)
+        assertTrue(session.isPlaying.value)
     }
 }

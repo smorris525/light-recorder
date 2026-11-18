@@ -96,11 +96,10 @@ class PadsScreen(sealedActivity: SealedLightActivity, private val session: Patte
     private fun ColumnScope.Pads(transport: Transport) {
         val pattern by session.pattern.collectAsState()
         val window by session.window.collectAsState()
-        val take by session.patternTake.collectAsState()
         val step by session.playingStep.collectAsState()
         val isPadRecording by transport.isPadRecording.collectAsState()
         val clickOn by viewModel.clickOn.collectAsState()
-        val isPlaying = session.isPlaying(take)
+        val isPlaying by session.isPlaying.collectAsState()
         val playhead = session.playhead(step)
 
         LightTopBar(

@@ -60,9 +60,8 @@ class PatternScreen(sealedActivity: SealedLightActivity, private val id: UUID) :
     private fun Pattern(session: PatternSession) {
         val pattern by session.pattern.collectAsState()
         val window by session.window.collectAsState()
-        val take by session.patternTake.collectAsState()
         val step by session.playingStep.collectAsState()
-        val isPlaying = session.isPlaying(take)
+        val isPlaying by session.isPlaying.collectAsState()
         val playhead = session.playhead(step)
 
         Column(modifier = Modifier.fillMaxSize()) {

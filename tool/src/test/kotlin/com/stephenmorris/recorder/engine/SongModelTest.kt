@@ -182,4 +182,9 @@ class SongModelTest {
         assertFalse(preloaded)
         assertNull(model.openSongId.value)
     }
+
+    @Test
+    fun aNewModelDoesntClick() {
+        assertFalse(model().clicks)
+    }
 }

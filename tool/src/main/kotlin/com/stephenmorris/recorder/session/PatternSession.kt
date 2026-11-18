@@ -38,6 +38,12 @@ class PatternSession(
     val window: StateFlow<BarWindow> = _window.asStateFlow()
 
     private var follow = Follow()
+
+    init {
+        // This pattern's screens are showing: ▶ loops it alone, and ● on Pads overdubs it without ▶ first.
+        // Leaving clears it (`PatternEditing.leave`).
+        editing.audition(id)
+    }
     private var isPainting = false
 
     /** The last step heard while this pattern played: what a bar dot compares against. */
@@ -49,8 +55,11 @@ class PatternSession(
     /** The step being heard, for the screens to collect: [playhead] reads it. */
     val playingStep: StateFlow<PatternStep?> = model.playingStep
 
-    /** Whether [take] is this pattern looping alone (not a take on the tape). */
-    fun isPlaying(take: PatternTakeState?): Boolean = take != null && !take.records && take.playing == id
+    /**
+     * Whether anything is playing, this pattern or the tape: ▶ shows ■ then, since a tap stops it
+     * (spec §10).
+     */
+    val isPlaying: StateFlow<Boolean> = transport.isPlaying
 
     /** The step of [step] if it's this pattern's. */
     fun playhead(step: PatternStep?): Int? = step?.takeIf { it.pattern == id }?.step
