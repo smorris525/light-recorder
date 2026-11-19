@@ -39,7 +39,8 @@ class StereoTrackOutput private constructor(
     @Volatile
     private var trackStartFrame = 0L
     private var loggedLatency = false
-    private val routing = AudioRouting.OnRoutingChangedListener { reportRoute(it) }
+    // A change queued for a track since released is ignored, so it can't clear the playing one's route.
+    private val routing = AudioRouting.OnRoutingChangedListener { if (it === track) reportRoute(it) }
 
     override val isRunning: Boolean
         get() = running && writer?.isAlive == true
@@ -80,6 +81,8 @@ class StereoTrackOutput private constructor(
         suspend()
         val built = build() ?: return false
         track = built
+        // Listening before it plays, so no change of route is missed between playing and the first read.
+        built.addOnRoutingChangedListener(routing, null)
         return try {
             built.play()
             trackStartFrame = mix.renderedFrames
@@ -88,7 +91,6 @@ class StereoTrackOutput private constructor(
             loggedLatency = false
             writer = Thread(::writeLoop, "RecorderAudio").apply { start() }
             reportRoute(built)
-            built.addOnRoutingChangedListener(routing, null)
             true
         } catch (exception: IllegalStateException) {
             Log.e(TAG, "AudioTrack wouldn't play", exception)

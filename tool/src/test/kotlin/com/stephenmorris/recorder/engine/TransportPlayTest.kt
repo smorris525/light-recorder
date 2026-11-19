@@ -177,6 +177,19 @@ class TransportPlayTest {
     }
 
     @Test
+    fun aDeadMicIsClosedWhenItsTrackIsDisarmed() {
+        transport.toggleArm(fixture.song.tracks[1].id)
+        fixture.advance(20)
+        fixture.input.die()
+
+        transport.toggleArm(fixture.song.tracks[1].id)
+        fixture.advance(20)
+
+        // Dead, it reads as closed, but it still holds its AudioRecord and its route until closed.
+        assertTrue(fixture.input.closes > 0)
+    }
+
+    @Test
     fun aRefusedMicArmsNothingAndIsNotRetried() {
         fixture.input.granted = false
 

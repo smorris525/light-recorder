@@ -34,7 +34,8 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
     @Volatile
     private var failed = false
     private var loggedLatency = false
-    private val routing = AudioRouting.OnRoutingChangedListener { reportRoute(it) }
+    // A change queued for a recorder since closed is ignored, so it can't clear the open one's route.
+    private val routing = AudioRouting.OnRoutingChangedListener { if (it === record) reportRoute(it) }
 
     override var framesDrained = 0L
         private set
@@ -70,14 +71,16 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
             Log.w(TAG, "mic wouldn't initialise (no permission?)")
             return false
         }
+        // Listening before it starts, so no change of route is missed between starting and the first read.
+        built.addOnRoutingChangedListener(routing, null)
         try {
             built.startRecording()
         } catch (exception: IllegalStateException) {
-            built.release()
+            discard(built)
             return false
         }
         if (built.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-            built.release()
+            discard(built)
             return false
         }
         // Anything left in the ring is from before: the frames count from this opening.
@@ -90,7 +93,6 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
         running = true
         reader = Thread({ readLoop(built) }, "RecorderMic").apply { start() }
         reportRoute(built)
-        built.addOnRoutingChangedListener(routing, null)
         return true
     }
 
@@ -119,6 +121,11 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
             Log.i(TAG, "input: rate $sampleRate Hz, stamp frame ${timestamp.framePosition}, $ahead ms old")
         }
         return Stamp(timestamp.framePosition, timestamp.nanoTime)
+    }
+
+    private fun discard(built: AudioRecord) {
+        built.removeOnRoutingChangedListener(routing)
+        built.release()
     }
 
     private fun reportRoute(router: AudioRouting) {

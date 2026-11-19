@@ -218,7 +218,8 @@ class Transport(
             if (!input.open()) {
                 refusedTrack = armed
             }
-        } else if (!wantsInput && input.isOpen) {
+        } else if (!wantsInput) {
+            // Even when it reads as closed: a mic whose reader died still holds its recorder until it's closed.
             input.close()
         }
     }

@@ -72,6 +72,7 @@ class FakeInput(
 ) : AudioInput {
     var granted = true
     var opens = 0
+    var closes = 0
     override var isOpen = false
     override val meter = InputMeter()
     override var framesDrained = 0L
@@ -89,6 +90,7 @@ class FakeInput(
     }
 
     override fun close() {
+        closes += 1
         isOpen = false
         queued.clear()
     }
