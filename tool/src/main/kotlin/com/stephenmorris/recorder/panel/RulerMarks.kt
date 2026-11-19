@@ -36,7 +36,7 @@ object RulerMarks {
         val playheadLabel = if (playheadX in 0.0..width) {
             val text = TimeText.readout(playhead)
             val half = textWidth(text, true) / 2
-            val centre = playheadX.coerceIn(TapeFrame.INSET + half, maxOf(TapeFrame.INSET + half, width - TapeFrame.INSET - half))
+            val centre = playheadX.coerceIn(tape.inset + half, maxOf(tape.inset + half, width - tape.inset - half))
             Label(text, centre - half, isPlayhead = true)
         } else {
             null

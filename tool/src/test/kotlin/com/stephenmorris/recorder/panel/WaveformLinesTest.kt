@@ -6,7 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertTrue
 
 class WaveformLinesTest {
-    private val width = 348.0
+    private val width = 324.0
     private val height = 30.0
 
     private fun lines(
@@ -24,7 +24,7 @@ class WaveformLinesTest {
     fun aSpanWithNoRecordingDrawsItsStandIn() {
         val drawn = lines(tracks = listOf(listOf(Span(10.0, 20.0, 1.0)) to 1f))
         assertTrue(drawn.isNotEmpty())
-        assertTrue(drawn.all { it.x in 126.0..226.0 }, drawn.map { it.x }.toString())
+        assertTrue(drawn.all { it.x in 114.0..214.0 }, drawn.map { it.x }.toString())
     }
 
     @Test
@@ -38,7 +38,7 @@ class WaveformLinesTest {
     fun aPatternTakeIsDrawnOnlyUpToThePlayhead() {
         val drawn = lines(liveHits = WaveformLines.Source(gain = 1f, until = 10.0) { _, _ -> 0.5f })
         assertTrue(drawn.isNotEmpty())
-        assertTrue(drawn.all { it.x < 126.0 }, drawn.map { it.x }.toString())
+        assertTrue(drawn.all { it.x < 114.0 }, drawn.map { it.x }.toString())
         assertTrue(drawn.all { it is WaveformLines.Line.Bar && it.height == 15.0 })
     }
 }
