@@ -30,7 +30,6 @@ import com.stephenmorris.recorder.song.TransportPanel
 import com.stephenmorris.recorder.song.asGridUnits
 import com.stephenmorris.recorder.tape.DrumPattern
 import com.stephenmorris.recorder.ui.ROW_INSET
-import com.stephenmorris.recorder.ui.SCREEN_MARGIN
 import com.stephenmorris.recorder.ui.ScreenFrame
 import com.stephenmorris.recorder.ui.UnderlinedText
 import com.stephenmorris.recorder.ui.backButton
@@ -39,11 +38,14 @@ import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.ui.LightIcon
 import com.thelightphone.sdk.ui.LightIcons
 import com.thelightphone.sdk.ui.LightScrollView
+import com.thelightphone.sdk.ui.LightScrollBarPosition
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightThemeTokens
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
+import com.thelightphone.sdk.ui.gridUnitsAsDp
+import com.thelightphone.sdk.ui.scrollBarGutterUnits
 import com.thelightphone.sdk.ui.lightClickable
 
 /**
@@ -87,7 +89,14 @@ class PatternsScreen(sealedActivity: SealedLightActivity) : LightScreen<Unit, Pa
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = ROW_INSET, end = SCREEN_MARGIN, top = 12.dp, bottom = 16.dp),
+                    // The scroll view keeps a strip for its scroll bar on the right: the pencil ends ROW_INSET from the edge
+                    // where that strip is narrower, and at the strip otherwise.
+                    .padding(
+                        start = ROW_INSET,
+                        end = (ROW_INSET - scrollBarGutterUnits(LightScrollBarPosition.Outside).gridUnitsAsDp()).coerceAtLeast(0.dp),
+                        top = 12.dp,
+                        bottom = 16.dp,
+                    ),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 for (pattern in song.patterns) {
