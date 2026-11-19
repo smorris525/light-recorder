@@ -3,12 +3,14 @@ package com.stephenmorris.recorder.platform
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioManager
+import android.media.AudioRouting
 import android.media.AudioTimestamp
 import android.media.AudioTrack
 import android.os.Process
 import android.util.Log
 import com.stephenmorris.recorder.audio.RecorderKit
 import com.stephenmorris.recorder.engine.AudioOutput
+import com.stephenmorris.recorder.engine.InterfaceRoute
 import com.stephenmorris.recorder.engine.OutputClock
 import com.stephenmorris.recorder.engine.Stamp
 import com.stephenmorris.recorder.tape.ClipStore
@@ -17,9 +19,13 @@ import com.stephenmorris.recorder.tape.MixRenderer
 /**
  * Streams the mix to the speaker through one stereo, float, low-latency [AudioTrack] at the device's native rate (spec
  * §4.1), from a writer thread at audio priority, as Drums' `TrackAudioOutput` does in mono. Build it off the main thread:
- * [create] renders the kit.
+ * [create] renders the kit. While it plays, it tells [route] which device it plays to.
  */
-class StereoTrackOutput private constructor(override val sampleRate: Int, clips: ClipStore) : AudioOutput {
+class StereoTrackOutput private constructor(
+    override val sampleRate: Int,
+    clips: ClipStore,
+    private val route: InterfaceRoute,
+) : AudioOutput {
     override val mix = MixRenderer(sampleRate.toDouble(), RecorderKit.voices(sampleRate.toDouble()), BLOCK_FRAMES, clips)
     private val timestamp = AudioTimestamp()
     private val clock = OutputClock()
@@ -33,6 +39,7 @@ class StereoTrackOutput private constructor(override val sampleRate: Int, clips:
     @Volatile
     private var trackStartFrame = 0L
     private var loggedLatency = false
+    private val routing = AudioRouting.OnRoutingChangedListener { reportRoute(it) }
 
     override val isRunning: Boolean
         get() = running && writer?.isAlive == true
@@ -80,6 +87,8 @@ class StereoTrackOutput private constructor(override val sampleRate: Int, clips:
             running = true
             loggedLatency = false
             writer = Thread(::writeLoop, "RecorderAudio").apply { start() }
+            reportRoute(built)
+            built.addOnRoutingChangedListener(routing, null)
             true
         } catch (exception: IllegalStateException) {
             Log.e(TAG, "AudioTrack wouldn't play", exception)
@@ -91,6 +100,8 @@ class StereoTrackOutput private constructor(override val sampleRate: Int, clips:
         if (!running && writer == null && track == null) {
             return
         }
+        track?.removeOnRoutingChangedListener(routing)
+        route.outputRouted(null)
         running = false
         writer?.join()
         writer = null
@@ -100,6 +111,12 @@ class StereoTrackOutput private constructor(override val sampleRate: Int, clips:
             it.release()
         }
         track = null
+    }
+
+    private fun reportRoute(router: AudioRouting) {
+        val device = router.routedDevice
+        Log.i(TAG, "output routed to ${device?.productName} (type ${device?.type})")
+        route.outputRouted(routeKind(device?.type))
     }
 
     private fun writeLoop() {
@@ -160,6 +177,7 @@ class StereoTrackOutput private constructor(override val sampleRate: Int, clips:
         fun nativeRate(): Int = AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC)
 
         /** Renders the kit at [sampleRate]. Slow: call off the main thread. */
-        fun create(sampleRate: Int, clips: ClipStore): StereoTrackOutput = StereoTrackOutput(sampleRate, clips)
+        fun create(sampleRate: Int, clips: ClipStore, route: InterfaceRoute): StereoTrackOutput =
+            StereoTrackOutput(sampleRate, clips, route)
     }
 }

@@ -1,6 +1,7 @@
 package com.stephenmorris.recorder.platform
 
 import com.stephenmorris.recorder.engine.Clips
+import com.stephenmorris.recorder.engine.InterfaceRoute
 import com.stephenmorris.recorder.engine.MixMeasurer
 import com.stephenmorris.recorder.engine.PatternEditing
 import com.stephenmorris.recorder.engine.SongEditing
@@ -42,6 +43,8 @@ object Recorder {
         val patterns: PatternEditing,
         /** The click on Pads (spec §3); changing it saves it. */
         val clickOn: MutableStateFlow<Boolean>,
+        /** Whether a USB audio interface is in use (spec §4.2). */
+        val route: InterfaceRoute,
     )
 
     private val scope = MainScope()
@@ -79,13 +82,14 @@ object Recorder {
             // The output's mix and the measurer read the same recordings, at the output's rate.
             val rate = StereoTrackOutput.nativeRate()
             val clips = Clips(store, rate.toDouble())
-            val output = StereoTrackOutput.create(rate, clips.clipStore)
-            val input = MicInput(rate)
+            val route = InterfaceRoute()
+            val output = StereoTrackOutput.create(rate, clips.clipStore, route)
+            val input = MicInput(rate, route)
             val transport = Transport(model, output, input, clips)
             val measurer = MixMeasurer(model, transport, clips, store)
             Ready(
                 model, transport, measurer, clips, store, click, SongEditing(model, transport, store),
-                TapeControls(model, transport), PatternEditing(model, transport), MutableStateFlow(clicks),
+                TapeControls(model, transport), PatternEditing(model, transport), MutableStateFlow(clicks), route,
             )
         }.also { built ->
             scope.launch { TickLoop.run(built.transport, built.model) }

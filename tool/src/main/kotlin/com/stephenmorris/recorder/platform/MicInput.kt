@@ -3,21 +3,24 @@ package com.stephenmorris.recorder.platform
 import android.annotation.SuppressLint
 import android.media.AudioFormat
 import android.media.AudioRecord
+import android.media.AudioRouting
 import android.media.AudioTimestamp
 import android.media.MediaRecorder
 import android.os.Process
 import android.util.Log
 import com.stephenmorris.recorder.engine.AudioInput
 import com.stephenmorris.recorder.engine.InputMeter
+import com.stephenmorris.recorder.engine.InterfaceRoute
 import com.stephenmorris.recorder.engine.Stamp
 import com.stephenmorris.recorder.tape.CaptureRing
 
 /**
  * The mic (spec §4.2): a plain [AudioRecord] at the output's rate, 16-bit mono, read on its own thread at audio priority
  * into [meter] and a 30 s lock-free ring that the transport drains. Android's default input: the phone's mic, or a
- * plugged-in headset's. Opening fails, returning `false`, without `RECORD_AUDIO`.
+ * plugged-in headset's, or an interface's. Opening fails, returning `false`, without `RECORD_AUDIO`. While open, it tells
+ * [route] which device it records from.
  */
-class MicInput(private val sampleRate: Int) : AudioInput {
+class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) : AudioInput {
     override val meter = InputMeter()
     private val ring = CaptureRing(sampleRate * RING_SECONDS)
     private val timestamp = AudioTimestamp()
@@ -31,6 +34,7 @@ class MicInput(private val sampleRate: Int) : AudioInput {
     @Volatile
     private var failed = false
     private var loggedLatency = false
+    private val routing = AudioRouting.OnRoutingChangedListener { reportRoute(it) }
 
     override var framesDrained = 0L
         private set
@@ -85,11 +89,15 @@ class MicInput(private val sampleRate: Int) : AudioInput {
         failed = false
         running = true
         reader = Thread({ readLoop(built) }, "RecorderMic").apply { start() }
+        reportRoute(built)
+        built.addOnRoutingChangedListener(routing, null)
         return true
     }
 
     override fun close() {
         val built = record ?: return
+        built.removeOnRoutingChangedListener(routing)
+        route.inputRouted(null)
         running = false
         built.stop()
         reader?.join()
@@ -111,6 +119,12 @@ class MicInput(private val sampleRate: Int) : AudioInput {
             Log.i(TAG, "input: rate $sampleRate Hz, stamp frame ${timestamp.framePosition}, $ahead ms old")
         }
         return Stamp(timestamp.framePosition, timestamp.nanoTime)
+    }
+
+    private fun reportRoute(router: AudioRouting) {
+        val device = router.routedDevice
+        Log.i(TAG, "input routed to ${device?.productName} (type ${device?.type})")
+        route.inputRouted(routeKind(device?.type))
     }
 
     private fun readLoop(built: AudioRecord) {
