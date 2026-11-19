@@ -17,7 +17,7 @@ lowercase, as in Drums.
 - **Look:** Light's own building blocks wherever they exist: `LightTheme`, the LightOS font and `LightTextVariant`s,
   `LightTopBar`, `LightBottomBar`, `LightBarButton`, `LightScrollView`, `LightTextInputEditor`,
   `LightEmbeddedLp3Keyboard`, `LightIcons`, `lightClickable`. Custom drawing only where the SDK has nothing for the job:
-  the channel strips (fader, pan, meter), the ruler, the lane, a few icons (the drum, the in and out brackets, and
+  the channel strips (fader, pan, meter), the ruler, the lane, a few icons (the drum, the jack, the in and out brackets, and
   Drums' metronome, step grid and count-in), the choice underline, and Drums' musical parts (step dots, pads, keypad).
   LightOS conventions throughout.
 - **Animation:** none. Every change is an instant swap.
@@ -29,14 +29,17 @@ lowercase, as in Drums.
 
 ### Left out
 
-- **Monitor** (hearing the mic live). Kotlin-only audio can't get the round trip low enough to be playable, and the
-  Recorder anti-goal is "hears noticeable delay". A Microphone track's screen has only Input. "plug in headphones to
-  monitor" goes with it.
-- **Input gain**, the handle on the armed Microphone track's meter. Android gives tools no mic gain control. The meter
+- **Monitor** (hearing the mic live). Kotlin-only audio can't get the round trip low enough to be playable, and a
+  delay you can hear is worse than none. A Mic/Line track's screen has only Input. With an interface plugged in, the player hears themselves on the interface's own direct
+  monitoring instead, and the Track screen says so (§9).
+- **Input gain**, the handle on the armed Mic/Line track's meter. Android gives tools no mic gain control. The meter
   still shows the input level.
-- **Always the built-in mic.** Tools can't choose an input device (that needs `AudioManager`, which needs a `Context`).
-  The mic is Android's default: the phone's own, or a plugged-in USB-C headset's (§4.2). Bluetooth is listen-only, since
-  only call mode opens a Bluetooth mic.
+- **Choosing the input.** Tools can't choose an input device (that needs `AudioManager`, which needs a `Context`).
+  The input is Android's default: the phone's own mic, a plugged-in USB-C headset's, or a USB audio interface's (§4.2).
+  So there's no row naming the device or its channel. Bluetooth is listen-only, since only call mode opens a Bluetooth
+  mic.
+- **Guitar tracks and an amp.** An amp heard while playing needs monitoring through the
+  app. A guitarist can still record a DI, or an amp modeller's output, on Mic/Line through an interface.
 - **A share sheet.** Export saves to Tool Manager instead (§13).
 - **Renaming in place.** Drums' Rename screen instead (§11).
 - **Alerts and sheets.** Every confirmation is full screen, as in Drums (§14).
@@ -83,12 +86,13 @@ In the `tape` package:
 
 - **Song:** id, name, notes, in point and out point (seconds, each optional), the view (`TapeView`), exactly four tracks,
   the patterns (at least one) and the selected pattern.
-- **Track:** id, number (1…4), input (`mic` | `drums`), volume (−48…+6 dB, and silent below), pan (L50…C…R50 in steps of
-  5), spans (audio) and hits (drums). There's no mute or solo. The name is always `Track n`.
+- **Track:** id, number (1…4), input (`mic` | `drums`, shown as Mic/Line and Drums; the stored `mic` is unchanged),
+  volume (−48…+6 dB, and silent below), pan (L50…C…R50 in steps of 5), spans (audio) and hits (drums).
+  There's no mute or solo. The name is always `Track n`.
 - **Pattern:** Drums' pattern (name, BPM, meter, bars, swing, steps) belonging to the song.
 - **Not saved:** which tracks are armed. A song opens with nothing armed.
 
-**A new song:** Track 1 on Drums, Tracks 2–4 on Microphone, and one pattern, "A": the plain rock beat at 100
+**A new song:** Track 1 on Drums, Tracks 2–4 on Mic/Line, and one pattern, "A": the plain rock beat at 100
 BPM, 4/4, 1 bar, no swing, selected. Nothing is recorded. There's no sample song: the first launch opens an empty
 library.
 
@@ -110,11 +114,19 @@ implementation:
 ### 4.2 Input
 
 - **Plain `AudioRecord`** (mic source, 16-bit mono, the output's rate) on its own thread. It's open only while a
-  Microphone track is armed. It feeds the meter and, during a take, a lock-free ring to a background
+  Mic/Line track is armed. It feeds the meter and, during a take, a lock-free ring to a background
   writer. The SDK's `LightAudioCapture` isn't used, since its flow drops buffers when the collector falls behind.
 - **Permission:** asked through the SDK (`checkPermission` / `rememberPermissionRequestLauncher`) the first time a
-  Microphone track is armed. If refused, nothing arms, and that track's Input reads `microphone not allowed`.
+  Mic/Line track is armed. If refused, nothing arms, and that track's Input reads `microphone not allowed`.
 - **Which mic:** Android's default input (§1, "Not carried over").
+- **Whether it's an interface:** read from the audio streams themselves, as neither needs a `Context`:
+  - While the input is open, `AudioRecord.routedDevice`, read after `startRecording()` and again in its
+    `OnRoutingChangedListener`: `TYPE_USB_DEVICE` is an interface. `TYPE_BUILTIN_MIC`, `TYPE_USB_HEADSET` and anything
+    else aren't. A headset has no direct monitoring, so it mustn't count as one.
+  - Otherwise, the output's `AudioTrack.routedDevice` and its listener: an interface plays as well as records, so a
+    `TYPE_USB_DEVICE` output counts until the input opens and says otherwise.
+  - The answer, `hasInterface`, is a `StateFlow` the screens read. It's logged with the device's `productName`
+    (`RecorderAudio`).
 
 ### 4.3 Alignment
 
@@ -136,7 +148,7 @@ implementation:
 
 ## 5. Song model and rules
 
-In `tape`, each rule covered by tests: four fixed tracks, inputs and arming (one Microphone track and one
+In `tape`, each rule covered by tests: four fixed tracks, inputs and arming (one Mic/Line track and one
 Drums track at once), recording clearing both kinds under a take, punch points, the 3 s lead-in and its count, pattern
 takes and queueing (a take stops at once on ■), song length (the last recording plus 30 s of blank
 tape), the lane's measurement, bounce (§15) and the mixdown.
@@ -195,11 +207,13 @@ As Drums §7, with songs:
 Four strips side by side: a 16 dp gap between strips, 36 dp
 button rows with 44 dp targets, and a 38 dp pan row. Every control is on screen without scrolling. Top to bottom:
 
-- **The number and input icon:** `Detail` text, then `LightIcons.MICROPHONE` or the hand-drawn drum
-  at 18 dp. A tap opens the track's screen (§9).
+- **The number and input icon:** `Detail` text, then at 18 dp: the hand-drawn drum on Drums;
+  on Mic/Line, `LightIcons.MICROPHONE`, or while `hasInterface` (§4.2) the hand-drawn jack (a
+  1/4" plug on a diagonal, tip to the upper right, with a lighter curl of cable at the lower left).
+  A tap opens the track's screen (§9).
 - **Pan:** a short line across with the handle alone, catching at C.
 - **The meter and the fader,** upright and side by side, as `LevelMeter` and `TrackSliders.volume`:
-  - **Meter:** the armed Microphone track's input, otherwise the track's playback level, with a 4 dp gap at the hot zone,
+  - **Meter:** the armed Mic/Line track's input, otherwise the track's playback level, with a 4 dp gap at the hot zone,
     level with the fader's 0 dB. CLIP shows on the hot zone for 2 s after full scale.
   - **Fader:** thick (5 dp) up to its handle (3 × 14 dp), with a 4 dp gap marking 0 dB while the handle is away. It catches
     within 8 dp of home.
@@ -232,10 +246,12 @@ All three show the transport panel underneath.
 
 - **Track screen:** `LightTopBar` with `BACK` and "Track 2", and no right icon. Label-over-value rows, as Drums' Settings
   main page:
-  - **Input** (`Microphone` / `Drums` / `microphone not allowed`) opens Input. It's locked (dimmed, doesn't open) while
+  - **Input** (`Mic/Line` / `Drums` / `microphone not allowed`) opens Input. It's locked (dimmed, doesn't open) while
     that track records.
+  - On Mic/Line while `hasInterface` (§4.2), under the rows: "to hear yourself, use your interface's monitor"
+    (`Detail`). Not with the built-in mic or a headset, and not on Drums. It comes and goes as the interface does.
   - On Drums, **Pattern** (the selected pattern's name) opens Patterns.
-- **Input:** Drums' choice page (`ChoiceScreen`), titled "Input": Microphone, Drums. The current option is underlined
+- **Input:** Drums' choice page (`ChoiceScreen`), titled "Input": Mic/Line, Drums. The current option is underlined
   (2 dp, about 3 dp under the text, as wide as it). Picking one moves the underline and the page stays open. Changing
   input disarms the track and never changes what's recorded.
 - **Patterns:** `LightTopBar` with `BACK` and "Patterns". A `LightScrollView` of the song's patterns:
@@ -361,6 +377,10 @@ These need hardware; there's no Light Phone III to test on:
 - Take alignment: the timestamp offsets and the correction constant (§4.3).
 - Output latency, and the pads' feel.
 - What a USB-C headset's mic does to a take (§4.2).
+- A USB audio interface (§4.2): whether LightOS routes the input to it at all; whether it reports `TYPE_USB_DEVICE`
+  (small iRig-style ones may say `TYPE_USB_HEADSET`, and a USB-C headset may say `TYPE_USB_DEVICE`); which channel a
+  mono `AudioRecord` gets from a two-input interface; whether the phone can power a bus-powered one; and take alignment
+  through it.
 - CPU: four tracks, the kit and a mic take, with the mix measured in the background.
 - The faders, pans and ruler scrub on the real touchscreen, and the haptics' feel: the ticks and the faders' and pans'
   arrival at home use Compose's `SegmentFrequentTick` (light) and `SegmentTick` (firmer).
