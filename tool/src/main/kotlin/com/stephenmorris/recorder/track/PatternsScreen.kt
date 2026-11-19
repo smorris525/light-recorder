@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -156,14 +155,18 @@ private fun PatternRow(
         if (isSelected) {
             Box(
                 modifier = Modifier
-                    .sizeIn(minWidth = 44.dp, minHeight = 44.dp)
+                    .sizeIn(minWidth = PENCIL_TARGET, minHeight = PENCIL_TARGET)
                     .lightClickable(onClickLabel = "Edit ${pattern.name}", onClick = onOpen),
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 LightIcon(LightIcons.PENCIL, size = 24.dp.asGridUnits(), contentDescription = null)
             }
         } else {
-            Spacer(Modifier.height(0.dp))
+            // The pencil's room, so every row is the same height and a row doesn't move when the selection does.
+            Spacer(Modifier.size(PENCIL_TARGET))
         }
     }
 }
+
+/** The pencil's tap target. */
+private val PENCIL_TARGET = 44.dp
