@@ -19,6 +19,9 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import com.thelightphone.sdk.ui.LightThemeTokens
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 
 /** An icon drawn on a square [grid], scaled to whatever size it's given, in [color]. As Drums' `DrawnIcon`. */
 private class DrawnIcon(
@@ -83,6 +86,66 @@ object RecorderIcons {
                 }
                 drawPath(lines, tint, style = stroke)
                 drawCircle(tint, 4.4f, Offset(20f, 21.5f))
+            }
+        }
+    }
+
+    /**
+     * A jack, beside a Mic/Line track's number while it records from an interface (spec §8):
+     * a 1/4" plug on a diagonal, tip to the upper right, its cable a lighter curl at the lower left, on a
+     * 40 grid.
+     */
+    @Composable
+    fun jack(): Painter {
+        val color = tint(false)
+        return remember(color) {
+            DrawnIcon(40f, color) { tint ->
+                // The plug drawn upright, tip up, then scaled, turned 45° and placed.
+                val scale = 1.3f
+                val turn = (PI / 4).toFloat()
+                fun plug(x: Float, y: Float): Offset {
+                    val px = x * scale
+                    val py = y * scale
+                    return Offset(21.5f + px * cos(turn) - py * sin(turn), 18.5f + px * sin(turn) + py * cos(turn))
+                }
+                fun Path.moveTo(point: Offset) = moveTo(point.x, point.y)
+                fun Path.lineTo(point: Offset) = lineTo(point.x, point.y)
+                fun Path.curveTo(first: Offset, second: Offset, end: Offset) =
+                    cubicTo(first.x, first.y, second.x, second.y, end.x, end.y)
+                val round = Stroke(3f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+
+                val tip = Path().apply {
+                    moveTo(plug(-2.1f, -14.8f))
+                    lineTo(plug(-2.1f, -17.2f))
+                    lineTo(plug(0f, -19.6f))
+                    lineTo(plug(2.1f, -17.2f))
+                    lineTo(plug(2.1f, -14.8f))
+                    close()
+                }
+                drawPath(tip, tint)
+
+                // A gap from the tip, as a plug's insulating ring.
+                drawLine(tint, plug(0f, -13.4f), plug(0f, -7f), strokeWidth = 3.4f * scale, cap = StrokeCap.Butt)
+
+                // The handle: a rounded outline, tapering into the cable.
+                val half = 4.3f
+                val handle = Path().apply {
+                    moveTo(plug(-half, -6f))
+                    lineTo(plug(half, -6f))
+                    lineTo(plug(half, 4f))
+                    curveTo(plug(half, 7f), plug(2f, 8.5f), plug(0f, 8.5f))
+                    curveTo(plug(-2f, 8.5f), plug(-half, 7f), plug(-half, 4f))
+                    close()
+                }
+                drawPath(handle, tint, style = round)
+
+                // Lighter than the plug, so the plug leads.
+                val cable = Path().apply {
+                    moveTo(plug(0f, 8.5f))
+                    curveTo(Offset(8f, 31f), Offset(6f, 37f), Offset(10.5f, 37.5f))
+                    curveTo(Offset(15.5f, 39f), Offset(19f, 30f), Offset(26f, 38.5f))
+                }
+                drawPath(cable, tint, style = Stroke(2.4f, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
         }
     }

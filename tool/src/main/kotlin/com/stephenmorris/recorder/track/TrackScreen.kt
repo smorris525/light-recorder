@@ -19,6 +19,8 @@ import com.stephenmorris.recorder.ui.backButton
 import com.thelightphone.sdk.LightScreen
 import com.thelightphone.sdk.SealedLightActivity
 import com.thelightphone.sdk.SealedLightContext
+import com.thelightphone.sdk.ui.LightText
+import com.thelightphone.sdk.ui.LightTextVariant
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
 import java.util.UUID
@@ -50,6 +52,7 @@ class TrackScreen(sealedActivity: SealedLightActivity, private val trackId: UUID
     private fun androidx.compose.foundation.layout.ColumnScope.Track(ready: Recorder.Ready) {
         ready.model.songs.collectAsState().value
         val isMicRefused by ready.transport.isMicRefused.collectAsState()
+        val hasInterface by ready.route.hasInterface.collectAsState()
         ready.transport.take.collectAsState().value
         ready.transport.patternTake.collectAsState().value
         val track = ready.model.track(trackId) ?: return
@@ -77,6 +80,10 @@ class TrackScreen(sealedActivity: SealedLightActivity, private val trackId: UUID
                 SummaryRow("Pattern", song.currentPattern?.name.orEmpty()) {
                     navigateTo({ PatternsScreen(it) })
                 }
+            }
+            // No monitoring through the app (spec §1): with an interface, the player hears themselves on its own.
+            if (track.input == TrackInput.MIC && hasInterface) {
+                LightText("to hear yourself, use your interface's monitor", LightTextVariant.Detail)
             }
         }
         TransportPanel(ready)

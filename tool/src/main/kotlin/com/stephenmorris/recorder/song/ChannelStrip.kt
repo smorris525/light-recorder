@@ -63,6 +63,7 @@ fun ChannelStrip(ready: Recorder.Ready, track: Track, onOpen: () -> Unit, modifi
     val arming by model.arming.collectAsState()
     val take by transport.take.collectAsState()
     val patternTake by transport.patternTake.collectAsState()
+    val hasInterface by ready.route.hasInterface.collectAsState()
     val isTakeUnderWay = take != null || patternTake?.records == true
     val askForMic = rememberPermissionRequestLauncher(Manifest.permission.RECORD_AUDIO)
 
@@ -78,7 +79,9 @@ fun ChannelStrip(ready: Recorder.Ready, track: Track, onOpen: () -> Unit, modifi
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             ) {
                 LightText("${track.number}", LightTextVariant.Detail)
-                if (track.input == TrackInput.MIC) {
+                if (track.input == TrackInput.MIC && hasInterface) {
+                    Image(RecorderIcons.jack(), contentDescription = null, modifier = Modifier.size(18.dp))
+                } else if (track.input == TrackInput.MIC) {
                     LightIcon(LightIcons.MICROPHONE, size = 18.dp.asGridUnits(), contentDescription = null)
                 } else {
                     Image(RecorderIcons.drums(), contentDescription = null, modifier = Modifier.size(18.dp))
