@@ -7,13 +7,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.thelightphone.sdk.ui.LightText
 import com.thelightphone.sdk.ui.LightTextVariant
+import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
 
-/** The inset of a screen's rows: the screen's 24 dp margin and 6 more. */
-val ROW_INSET = 30.dp
+/** The inset of a screen's rows: one grid unit, in line with the top bar's back button, as LightOS lists and Drums. */
+val ROW_INSET: Dp
+    @Composable get() = 1f.gridUnitsAsDp()
 
 /** The screen's margin. */
 val SCREEN_MARGIN = 24.dp
