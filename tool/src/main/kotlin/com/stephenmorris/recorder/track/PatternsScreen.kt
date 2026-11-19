@@ -128,7 +128,8 @@ private fun PatternRow(
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(
             modifier = Modifier.weight(1f).lightClickable(onClickLabel = pattern.name, onClick = onSelect),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            // The name keeps room for its underline whether or not it's selected, so the gap below it is small.
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 UnderlinedText(pattern.name, isSelected, LightTextVariant.Paragraph)
