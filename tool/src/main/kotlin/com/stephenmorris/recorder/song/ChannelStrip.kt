@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
@@ -41,6 +42,9 @@ private val TARGET = 44.dp
 
 /** The pan's row, drawn 38 dp tall over 30 dp of the strip, and its inset from each side. */
 private val PAN_ROW = 38.dp
+
+/** How far the number and input sit below their row's centre. */
+private val HEADER_DROP = 6.dp
 private val PAN_OVERLAP = 4.dp
 private val PAN_INSET = 6.dp
 
@@ -66,6 +70,8 @@ fun ChannelStrip(ready: Recorder.Ready, track: Track, onOpen: () -> Unit, modifi
         ButtonRow {
             Row(
                 modifier = Modifier
+                    // Nearer its pan slider than the top bar.
+                    .offset(y = HEADER_DROP)
                     .sizeIn(minWidth = TARGET, minHeight = TARGET)
                     .lightClickable(onClickLabel = "Open ${track.name}", onClick = onOpen),
                 verticalAlignment = Alignment.CenterVertically,
