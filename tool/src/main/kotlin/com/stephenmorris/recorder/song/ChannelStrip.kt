@@ -123,7 +123,7 @@ fun ChannelStrip(ready: Recorder.Ready, track: Track, onOpen: () -> Unit, modifi
                         onClickLabel = "${if (isArmed) "Disarm" else "Arm"} ${track.name}",
                     ) {
                         transport.toggleArm(track.id)
-                        // A Microphone track whose mic won't open asks for it; granted, a second tap arms it.
+                        // A Mic/Line track whose mic won't open asks for it; granted, a second tap arms it.
                         if (track.input == TrackInput.MIC && transport.isMicRefused.value) {
                             askForMic?.launch()
                         }

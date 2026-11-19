@@ -28,7 +28,7 @@ class MixMeasurerTest {
     private fun measurer(background: kotlinx.coroutines.CoroutineDispatcher = Dispatchers.Unconfined) =
         MixMeasurer(model, fixture.transport, fixture.clips, fixture.store, background)
 
-    /** One second of [level] on the Microphone track from 1 s, and a snare on the Drums track at 0.5 s. */
+    /** One second of [level] on the Mic/Line track from 1 s, and a snare on the Drums track at 0.5 s. */
     private fun record(level: Float = 0.4f) {
         val clip = fixture.clips.add(FloatArray(48_000) { level })!!
         model.updateTrack(mic) { it.copy(spans = listOf(Span(1.0, 2.0, 0.0, clip))) }

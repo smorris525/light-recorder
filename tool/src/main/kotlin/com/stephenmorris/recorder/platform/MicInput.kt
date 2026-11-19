@@ -38,7 +38,7 @@ class MicInput(private val sampleRate: Int) : AudioInput {
     override val isOpen: Boolean
         get() = record != null && !failed
 
-    // RECORD_AUDIO is asked for before a Microphone track arms; without it AudioRecord won't initialise, which is checked.
+    // RECORD_AUDIO is asked for before a Mic/Line track arms; without it AudioRecord won't initialise, as is checked.
     @SuppressLint("MissingPermission")
     override fun open(): Boolean {
         if (record != null && !failed) {

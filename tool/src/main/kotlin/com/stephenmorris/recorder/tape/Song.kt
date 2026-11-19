@@ -111,7 +111,7 @@ data class Song(
         /** Every song has this many tracks. */
         const val TRACK_COUNT = 4
 
-        /** A new song: Track 1 on Drums, the rest on Microphone, and a rock pattern, selected. */
+        /** A new song: Track 1 on Drums, the rest on Mic/Line, and a rock pattern, selected. */
         fun new(name: String): Song {
             val pattern = DrumPattern.rock()
             return Song(

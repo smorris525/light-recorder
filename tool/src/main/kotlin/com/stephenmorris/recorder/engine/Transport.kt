@@ -78,7 +78,7 @@ data class PatternTakeState(
  * Plays the tape and records takes (spec §4, §5). The tick loop calls [tick] every 20 ms,
  * which keeps events placed [LOOKAHEAD] ahead of the render clock and reads the clock back for the playhead.
  *
- * Audio runs only while a song is open and the tool is in front. The mic opens only while a Microphone track is armed
+ * Audio runs only while a song is open and the tool is in front. The mic opens only while a Mic/Line track is armed
  * or a take is under way. Track *i* plays its recordings on mix slot *i* and its hits on drum bus *i*, at its volume and
  * pan; pads, clicks and auditions play on the unity bus. Main thread only.
  */
@@ -106,7 +106,7 @@ class Transport(
     /** The input clipped within the last 2 s. */
     val isClipping: StateFlow<Boolean> = _isClipping.asStateFlow()
 
-    /** The last Microphone track armed couldn't open the mic: its Input reads "microphone not allowed". */
+    /** The last Mic/Line track armed couldn't open the mic: its Input reads "microphone not allowed". */
     val isMicRefused: StateFlow<Boolean> = _isMicRefused.asStateFlow()
 
     /** The audio take under way, or waiting for its lead-in to end. */
@@ -175,7 +175,7 @@ class Transport(
     /** Left: audio stops, and stays stopped until [resume]. */
     private var isPaused = false
 
-    /** The Microphone track whose mic wouldn't open, so it isn't tried again on every tick. */
+    /** The Mic/Line track whose mic wouldn't open, so it isn't tried again on every tick. */
     private var refusedTrack: UUID? = null
 
     init {
@@ -268,7 +268,7 @@ class Transport(
     }
 
     /**
-     * Arms a track to record, or disarms it; not during a take. Arming a Microphone track opens the mic; if it won't
+     * Arms a track to record, or disarms it; not during a take. Arming a Mic/Line track opens the mic; if it won't
      * open (the permission refused), the track doesn't stay armed.
      */
     fun toggleArm(id: UUID) {
@@ -374,7 +374,7 @@ class Transport(
     // Recording
 
     /**
-     * ●: records every armed track together, the Microphone track from the mic and the song's selected pattern onto the
+     * ●: records every armed track together, the Mic/Line track from the mic and the song's selected pattern onto the
      * Drums track. From the in point, or from the playhead when stopped, the tape plays a 3 s lead-in first while the
      * count shows 3-2-1; playing with no in point, the takes punch in at once. With the out point after the start,
      * recording stops there, and so does the tape. ● again ends the takes. When the tape stops, the playhead returns to

@@ -34,7 +34,7 @@ import kotlin.math.roundToInt
 /**
  * A channel's meter (spec §8): upright beside its fader and drawn as it is, rising from the foot,
  * with a gap where the hot zone starts, level with the fader's 0 dB. It shows what's coming in while it's the armed
- * Microphone track, otherwise what the track is playing. CLIP shows on the hot zone for 2 s after full scale.
+ * Mic/Line track, otherwise what the track is playing. CLIP shows on the hot zone for 2 s after full scale.
  */
 @Composable
 fun LevelMeter(ready: Recorder.Ready, track: Track, modifier: Modifier = Modifier) {

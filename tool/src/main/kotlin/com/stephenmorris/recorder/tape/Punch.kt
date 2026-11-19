@@ -3,14 +3,14 @@ package com.stephenmorris.recorder.tape
 import java.util.UUID
 import kotlin.math.floor
 
-/** Which tracks are armed to record: one Microphone track and one Drums track at most. */
+/** Which tracks are armed to record: one Mic/Line track and one Drums track at most. */
 data class Arming(val audio: UUID? = null, val drums: UUID? = null) {
     val isEmpty: Boolean
         get() = audio == null && drums == null
 
     fun isArmed(id: UUID): Boolean = audio == id || drums == id
 
-    /** With [track] armed, or disarmed if it is armed. Arming a Microphone track disarms the other one. */
+    /** With [track] armed, or disarmed if it is armed. Arming a Mic/Line track disarms the other one. */
     fun toggling(track: Track): Arming {
         if (isArmed(track.id)) {
             return removing(track.id)

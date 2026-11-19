@@ -24,7 +24,7 @@ import kotlinx.serialization.json.doubleOrNull
  * brought back in, and
  * a song always has four tracks and at least one pattern. Only what makes a song or a track what it is (its id, a
  * song's name, a track's number) has to be there; a song without them is dropped, and a track without them is
- * replaced by an empty Microphone track.
+ * replaced by an empty Mic/Line track.
  */
 object SongCoding {
     private val json = Json {
@@ -162,7 +162,7 @@ private fun JsonObject.song(): Song? {
     val name = text("name") ?: return null
 
     // Exactly the tracks a song has: the saved ones numbered 1 to TRACK_COUNT (the first, if a number repeats), and a
-    // Microphone track for each missing number.
+    // Mic/Line track for each missing number.
     val saved = objects("tracks").mapNotNull { it.track() }
     val songTracks = (1..Song.TRACK_COUNT).map { number ->
         saved.firstOrNull { it.number == number } ?: Track(number = number, input = TrackInput.MIC)

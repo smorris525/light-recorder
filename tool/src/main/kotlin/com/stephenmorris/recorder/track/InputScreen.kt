@@ -12,7 +12,7 @@ import com.thelightphone.sdk.SealedLightActivity
 import java.util.UUID
 
 /**
- * A track's input (spec §9): Microphone or Drums, the current one underlined, over the transport panel. Changing it
+ * A track's input (spec §9): Mic/Line or Drums, the current one underlined, over the transport panel. Changing it
  * disarms the track, and leaves what's on its tape as it is.
  */
 class InputScreen(sealedActivity: SealedLightActivity, private val trackId: UUID) :

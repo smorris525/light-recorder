@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 class MixLevelsTest {
     private val rate = 8_000.0
 
-    /** A Microphone track playing one second of a steady [level] from 1 s, and the store holding it. */
+    /** A Mic/Line track playing one second of a steady [level] from 1 s, and the store holding it. */
     private fun track(level: Float, clips: ClipStore, indexes: MutableMap<UUID, Int>): Track {
         val clip = UUID.randomUUID()
         indexes[clip] = assertNotNull(clips.add(FloatArray(rate.toInt()) { level }))
