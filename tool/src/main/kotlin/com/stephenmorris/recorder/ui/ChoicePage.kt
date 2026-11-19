@@ -6,9 +6,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import com.thelightphone.sdk.ui.LightTopBar
 import com.thelightphone.sdk.ui.LightTopBarCenter
+import com.thelightphone.sdk.ui.gridUnitsAsDp
 import com.thelightphone.sdk.ui.lightClickable
 
 /**
@@ -25,13 +25,14 @@ fun ChoicePage(
 ) {
     ScreenFrame {
         LightTopBar(leftButton = backButton(onBack), center = LightTopBarCenter.Text(title))
-        Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        Column(modifier = Modifier.weight(1f).fillMaxWidth().padding(vertical = 0.5f.gridUnitsAsDp())) {
             options.forEachIndexed { index, (label, isCurrent) ->
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .lightClickable(onClickLabel = label) { onPick(index) }
-                        .padding(horizontal = ROW_INSET, vertical = 10.dp),
+                        // As Drums' choice pages: rows close together.
+                        .padding(horizontal = ROW_INSET, vertical = 0.4f.gridUnitsAsDp()),
                 ) {
                     UnderlinedText(label, isCurrent)
                 }
