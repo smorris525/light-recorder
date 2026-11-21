@@ -11,7 +11,8 @@ import kotlin.math.floor
 /**
  * What the ruler draws, without the drawing: a tick every minor step and a taller one
  * every major, none before 0:00 or past the song's end; each major tick's time just right of it, giving way to the
- * playhead's time; and the playhead's time over its marker, kept inside the margins.
+ * playhead's time; and the playhead's time over its marker, kept within the tape's ends. Times are printed on the tape:
+ * they scroll off the screen's edges with it, kept while any of them is on screen, even once their tick is off.
  */
 object RulerMarks {
     /** How near the playhead's time a major tick's time may come before it gives way. */
@@ -32,14 +33,15 @@ object RulerMarks {
     ): Pair<List<Tick>, List<Label>> {
         val tape = TapeFrame(width)
         val scale = RulerScale.forView(view.secondsAcross, tape.inner)
-        val playheadX = tape.x(playhead, view)
-        val playheadLabel = if (playheadX in 0.0..width) {
+        val onTape = tape.x(0.0, view)..tape.x(song.length, view)
+        fun onScreen(left: Double, right: Double) = right > 0 && left < width
+        // Kept within the tape's ends, so at 0:00 and the song's end it sits inside the screen's margins.
+        val playheadLabel = run {
             val text = TimeText.readout(playhead)
             val half = textWidth(text, true) / 2
-            val centre = playheadX.coerceIn(tape.inset + half, maxOf(tape.inset + half, width - tape.inset - half))
-            Label(text, centre - half, isPlayhead = true)
-        } else {
-            null
+            val lowest = onTape.start + half
+            val centre = tape.x(playhead, view).coerceIn(lowest, maxOf(lowest, onTape.endInclusive - half))
+            Label(text, centre - half, isPlayhead = true).takeIf { onScreen(it.x, centre + half) }
         }
         val clear = playheadLabel?.let { label ->
             (label.x - LABEL_CLEARANCE)..(label.x + textWidth(label.text, true) + LABEL_CLEARANCE)
@@ -47,19 +49,18 @@ object RulerMarks {
 
         val brackets = PointBrackets.spans(PointBrackets.uprights(song, view, width))
         val shown = tape.times(view)
-        val first = floor(shown.start / scale.minor).toInt()
-        val last = minOf(ceil(shown.endInclusive / scale.minor).toInt(), floor(song.length / scale.minor).toInt())
         val minorsPerMajor = roundHalfAway(scale.major / scale.minor).toInt()
-        val onTape = tape.x(0.0, view)..tape.x(song.length, view)
+        // A major's worth more either side for the times of ticks just off screen, whose text may still be on it.
+        val first = floor(shown.start / scale.minor).toInt() - minorsPerMajor
+        val last = minOf(
+            ceil(shown.endInclusive / scale.minor).toInt() + minorsPerMajor,
+            floor(song.length / scale.minor).toInt(),
+        )
         val ticks = mutableListOf<Tick>()
         val labels = mutableListOf<Label>()
         for (index in maxOf(0, first)..maxOf(0, last)) {
             val time = index * scale.minor
             val x = tape.x(time, view)
-            if (x < -1 || x > width + 1) {
-                continue
-            }
-            val tickX = x.coerceIn(0.75, width - 0.75)
             val isMajor = index % minorsPerMajor == 0
             if (isMajor) {
                 val text = RulerScale.label(time, scale)
@@ -72,10 +73,14 @@ object RulerMarks {
                 }
                 val right = left + labelWidth
                 val clears = clear == null || right < clear.start || left > clear.endInclusive
-                if (left in onTape && right in onTape && clears) {
+                if (left in onTape && right in onTape && onScreen(left, right) && clears) {
                     labels += Label(text, left, isPlayhead = false)
                 }
             }
+            if (x < -1 || x > width + 1) {
+                continue
+            }
+            val tickX = x.coerceIn(0.75, width - 0.75)
             if (brackets.none { tickX in it }) {
                 ticks += Tick(tickX, isMajor)
             }

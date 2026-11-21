@@ -12,8 +12,8 @@ class RulerMarksTest {
     private val width = 324.0
     private val textWidth = { text: String, _: Boolean -> text.length * 5.0 }
 
-    private fun layout(song: Song = this.song, playhead: Double = 0.0) =
-        RulerMarks.layout(song, TapeView(), playhead, width, textWidth)
+    private fun layout(song: Song = this.song, playhead: Double = 0.0, start: Double = 0.0) =
+        RulerMarks.layout(song, TapeView(start = start), playhead, width, textWidth)
 
     @Test
     fun noTicksBeforeZeroOrPastTheEnd() {
@@ -36,7 +36,7 @@ class RulerMarksTest {
     }
 
     @Test
-    fun thePlayheadLabelStaysInsideTheMargins() {
+    fun thePlayheadLabelStaysWithinTheTape() {
         val (_, labels) = layout()
         val label = labels.single { it.isPlayhead }
         val half = textWidth(label.text, true) / 2
@@ -55,5 +55,35 @@ class RulerMarksTest {
     fun theLastLabelFlipsLeftAtTheTapesEnd() {
         val (_, labels) = layout(playhead = 15.0)
         assertEquals(289.0, labels.single { it.text == "0:30" }.x)
+    }
+
+    // Scrolled 1.5 s on, 0:00 is at x -3, off the left edge.
+
+    @Test
+    fun thePlayheadLabelScrollsOffWithTheTape() {
+        val (_, labels) = layout(playhead = 0.0, start = 1.5)
+        assertEquals(-3.0, labels.single { it.isPlayhead }.x)
+        assertTrue(labels.none { it.text == "0:00" })
+    }
+
+    @Test
+    fun aLabelStaysWhileItsTickIsJustOffTheLeft() {
+        val (_, labels) = layout(playhead = 20.0, start = 1.5)
+        assertEquals(0.0, labels.single { it.text == "0:00" }.x)
+    }
+
+    @Test
+    fun aLabelStaysWhileItsTickIsJustOffTheRight() {
+        // Scrolled 1.5 s back, 0:30 is at x 327, its label flipped left of it.
+        val (_, labels) = layout(playhead = 15.0, start = -1.5)
+        assertEquals(304.0, labels.single { it.text == "0:30" }.x)
+    }
+
+    @Test
+    fun aLabelWhollyOffScreenIsLeftOut() {
+        // Scrolled 5 s on, 0:00 is at x -38: its time, and the playhead's there, end before the left edge.
+        val (_, labels) = layout(playhead = 0.0, start = 5.0)
+        assertTrue(labels.none { it.text == "0:00" })
+        assertTrue(labels.none { it.isPlayhead })
     }
 }
