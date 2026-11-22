@@ -5,6 +5,7 @@ import com.stephenmorris.recorder.core.MeterId
 import com.stephenmorris.recorder.core.Sound
 import com.stephenmorris.recorder.core.StepGrid
 import com.stephenmorris.recorder.core.Swing
+import com.stephenmorris.recorder.core.resized
 import java.util.UUID
 
 /** A loop of drum steps, with the tempo, meter and swing it plays at. */
@@ -58,33 +59,9 @@ data class DrumPattern(
         return hits.sortedBy { it.time }
     }
 
-    /**
-     * Resized: each new bar that's empty repeats the existing bars in turn. Shortening keeps the
-     * steps past the end, so lengthening again brings them back.
-     */
-    fun resized(bars: Int): DrumPattern {
-        val stepsPerBar = meter.layout.stepsPerBar
-        var grid = steps
-        if (bars > this.bars) {
-            for (bar in this.bars until bars) {
-                if (hasHits(bar, stepsPerBar)) {
-                    continue
-                }
-                for (sound in Sound.entries) {
-                    for (step in 0 until stepsPerBar) {
-                        val level = steps[sound, (bar % this.bars) * stepsPerBar + step] ?: continue
-                        grid = grid.with(sound, bar * stepsPerBar + step, level)
-                    }
-                }
-            }
-        }
-        return copy(bars = bars, steps = grid)
-    }
-
-    private fun hasHits(bar: Int, stepsPerBar: Int): Boolean {
-        val range = bar * stepsPerBar until (bar + 1) * stepsPerBar
-        return Sound.entries.any { sound -> steps.hits(sound).keys.any { it in range } }
-    }
+    /** Resized as Light Drums does: new bars repeat the existing bars in order, and shortening drops bars from the end. */
+    fun resized(bars: Int): DrumPattern =
+        copy(bars = bars, steps = steps.resized(meter.layout.stepsPerBar, this.bars, bars))
 
     companion object {
         /** A plain rock beat in 4/4. */

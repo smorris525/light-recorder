@@ -75,25 +75,38 @@ class DrumPatternTest {
     }
 
     @Test
-    fun lengtheningABeatCopiesIntoEmptyBarsOnly() {
-        var pattern = DrumPattern(name = "A")
+    fun lengtheningABeatRepeatsItsBars() {
+        var pattern = DrumPattern(name = "A", bars = 2)
         pattern = pattern.copy(steps = pattern.steps.with(Sound.KICK, 0, Level.ACCENT).with(Sound.SNARE, 20, Level.HIT))
 
-        pattern = pattern.resized(3)
+        pattern = pattern.resized(4)
 
         assertEquals(Level.ACCENT, pattern.steps[Sound.KICK, 32])
+        assertEquals(Level.HIT, pattern.steps[Sound.SNARE, 52])
         assertNull(pattern.steps[Sound.KICK, 16])
-        assertEquals(3, pattern.bars)
+        assertEquals(4, pattern.bars)
     }
 
     @Test
-    fun shorteningABeatKeepsItsHiddenSteps() {
+    fun shorteningABeatDropsItsLastBars() {
         var pattern = DrumPattern(name = "A", bars = 2)
-        pattern = pattern.copy(steps = pattern.steps.with(Sound.KICK, 20, Level.HIT))
+        pattern = pattern.copy(steps = pattern.steps.with(Sound.KICK, 0, Level.ACCENT).with(Sound.KICK, 20, Level.HIT))
 
         pattern = pattern.resized(1)
 
         assertEquals(1, pattern.bars)
+        assertEquals(Level.ACCENT, pattern.steps[Sound.KICK, 0])
+        assertNull(pattern.steps[Sound.KICK, 20])
+    }
+
+    @Test
+    fun lengtheningAfterShorteningRepeatsTheBeatAsEdited() {
+        var pattern = DrumPattern.rock().resized(2).resized(1)
+        pattern = pattern.copy(steps = pattern.steps.with(Sound.SNARE, 4, null).with(Sound.KICK, 4, Level.HIT))
+
+        pattern = pattern.resized(2)
+
+        assertNull(pattern.steps[Sound.SNARE, 20])
         assertEquals(Level.HIT, pattern.steps[Sound.KICK, 20])
     }
 
