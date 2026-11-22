@@ -1,74 +1,79 @@
-# light-sdk
-or: a tool for building Tools
+# Recorder
 
-## tl;dr
-This repository contains the scaffolding for building simple tools for the Light Phone III. Included are a library ([:sdk:client](./sdk/client)) and placeholder application ([:tool](./tool)) that depends on it. To create a tool that is fully compatible with LightOS, you must write your application code within the `tool` module, using the primitives provided by the sdk client library.
+A four-track recorder with a drum machine, for the Light Phone III.
 
-You can and should use current Android best practices: Kotlin for all source code, Compose for UI, Coroutines for async programming, and MVVM architecture. **Although this is appears to be a fairly standard Android dev environment, you will quickly find out that we are (gently but broadly) restricting which Android APIs and third-party libraries can be used. This is in an effort to provide a secure and distinctly _light_ experience for our users. These restrictions are _not_ set in stone and should ease up over time. If there is a stable, open-source library that you'd like us to allow, please let us know! More on this later.**
+Recorder is a Light Phone tool. You record a song on four tracks. Each track
+takes either Mic/Line (the phone's mic, a USB-C headset or a USB audio interface) or Drums (patterns played from the
+built-in drum machine, which comes from the Drums tool). There's no network and no account, and nothing leaves the
+phone until you export it.
 
-## IMPORTANT!! July 1, 2026 Update
-If you're reading this, welcome! You're early! (in a cool way)
-This repo is a work-in-progress and will remain so for a while. Things are going to change _fast_ in the coming weeks. If you're going to start building right away, be sure to `git pull` frequently.
-Before you do, though, please be aware that **while we feel good about letting everybody start to explore and build, we are still working on the infrastructure to properly deploy your new tools.**
-The currently builds of LightOS in the wild are not yet ready to "play nice" with the tools built here. If you're someone who's already comfortable working with ADB to sideload APKs on your
-Light Phone III, you can totally do that with whatever you do here! But we're shooting to make these tools feel as seamless as the ones already available in LightOS, and that's going to take a bit more work. 
-We're hoping to have an update on that front later this month. In the meantime, the best way to start working is to use an Android emulator running our new [LightOS Emulator](sdk/emulator). The instructions for getting that up and running
-are [right here](docs/system_app).
+## What it does
 
-## Quickstart
+- **Library:** your songs, each listed with its length.
+- **Song:** four channel strips with input, pan, meter, fader and arm controls, above a transport panel that has a
+  ruler, a waveform lane, in and out points, record and play.
+- **Tracks:** a Mic/Line or Drums input on each track. Arm one Mic/Line track and one Drums track at a time. A take
+  starts with a 3 s lead-in and punches in and out at the points you set.
+- **Drum machine:** each song has its own patterns, with a step grid, pads with count-in overdub, tempo, time signature,
+  length and swing. Pattern takes are queued while recording.
+- **Bounce:** mix any tracks down onto one.
+- **Export:** saves the song as a 320 kbps AAC `.m4a`. You can download it from Tool Manager, under Recorder ›
+  Exports.
+- **Notes:** a notes page for each song.
+- **USB audio interfaces:** while one is in use, a jack icon replaces the mic icon. The Track screen tells you to listen
+  through the interface's direct monitoring, since the app has no monitoring of its own.
 
-### Running your Tool
-**You can test your tool on any Android device or emulator**, but certain functionality (receiving push notifications, requesting special permissions) can only be tested with:
-A) Real Light Phone hardware running LightOS
-B) An Android emulator (on your computer) set up to run our LightOS emulator app as a _system app_ ([see advanced instructions](docs/system_app))
+Some things are left out of this version: live monitoring, input gain, choosing the input device and guitar tracks
+with an amp. The [spec](tool/docs/spec.md#left-out) says why for each.
 
-You can quickly [create an emulator](https://developer.android.com/studio/run/managing-avds) that generally feels like an LPIII by using the following settings:
-* 1080 X 1240, 3.92" display
-* Android API 34
-* NO Google Play Services installed
+## Repository layout
 
-### Start Building
-1. Fork and/or clone this repository into your local dev environment.
-2. Install Android Studio and open this project within it. (IntelliJ IDEA should also work)
-   - Set your tool's `id` in [`tool/lighttool.toml`](tool/lighttool.toml) to a package name you own (e.g. `com.yourname.mytool`). Ids in the `lightphone` and `thelightphone` namespaces (e.g. `com.lightphone.*`, `org.thelightphone.*`) are reserved for Light. See [tool metadata](docs/tool_metadata).
+This repo is a clone of [`lightphone/light-sdk`](https://github.com/lightphone/light-sdk). The tool lives in
+[`tool/`](tool) under the Kotlin package `com.stephenmorris.recorder`:
 
-3. Edit the code in `HomeScreen` and `HomeScreenViewModel` to get started. `Homescreen` surfaces a `@Composable` method named `Content`. This is the UI that is shown when the tool first boots. You'll notice this UI sources data from it's `viewModel` field, which is an instance of `HomeScreenViewModel`. Edit that class with your screen's logic and expose the data to the UI using either Compose `State` or Coroutine `Flow`s. If you want to create a new screen, create a new Screen/ViewModel pair: your screen should extend from `LightScreen` and your VM from `LightScreenViewModel`. Your screen implementation will need:
-   1. A direct reference to your ViewModel's class type
-   2. A factory method for creating a new instance of your ViewModel.
+| Package | What's in it |
+| --- | --- |
+| `core` | The drum machine (ported from Drums) |
+| `audio` | DSP: the synthesised kits, compressor and limiter |
+| `tape` | The song model and its rules |
+| everything else | Engines, storage and Compose screens |
 
-Look at `HomeScreen` as an example for how this is done. To navigate to your new screen, use the `navigateTo` function built into `LightScreen` - just pass it a lambda to create an instance of your new screen. Note that the `LightScreen` constructor takes in a `SealedLightActivity`. The lambda is provided an instance of this as a default parameter.
+- [`tool/docs/spec.md`](tool/docs/spec.md): the agreed design. It's the source of truth for behaviour.
+- [`tool/lighttool.toml`](tool/lighttool.toml): the tool's id, version and permissions (`RECORD_AUDIO`).
 
-Since LightOS does not use Android system navigation, we provide a back button for you. As long as you use `navigateTo` to move between screens, our back button should work great. If need be, you can override the `onBackPressed` method in your `LightViewModel`.
+The other modules (`sdk`, `plugin`, `lint-rules`, `builder`, …) come from the Light SDK unchanged. For those, see
+[the SDK docs](docs) and [`docs/repo`](docs/repo/README.md).
 
-### Submitting Your Tool
-Given our relatively limited resources and desire to keep our users safe, we're requiring that all community tools be open source (including our own!). 
-Tools are built and signed directly from a publicly available git commit, and we'll be archiving the source at build time.
-You're free to build and share privately, but LightOS won't let you install tools that are not signed by us without acknowledging privacy and performance risks.
-We won't block users from performing these "dangerous" sideloads, but we're not going to encourage it either. 
-Using the Dashboard, developers are able to queue up a build of your tool on our servers, and if it follows our guidelines and compiles cleanly, we will hand you back a signed, shareable APK.
+## Building and running
 
-1. Review the [Tool Guidelines](TOOL_GUIDELINES.md) to get a sense of the kind of tools we're hoping to showcase.
-2. Ensure your tool is built with the latest Light SDK version and is accessible via a public Github repo.
-  - Keep the [files the build server requires](docs/repo/README.md#required-files) when trimming the repo down to your tool.
-3. Enable developer mode on the [dashboard](https://dashboard.thelightphone.com/): Settings -> Account -> Developer Account.
-4. From there, you can create your tool: Settings -> Account -> Developer Account -> Manage Custom Tools -> Submit New Tool:
-  - The package name is unique for all tools and can't be changed later. It is pulled from the default branch of the Github repo submitted upon registering the tool.
-  - You'll then have the opportunity to add images. You can add them later on as well, but we'll require at least one for a tool to be approved.
-5. Now go in the tool detail page and press "submit build":
-  - Enter the git ref of the version of the tool to be built and a small description of the changelog.
-  - If your tool already has an active build, you won't be able to submit another.
-  - The `versionCode` of the submitted build should be higher than the one of the last version listed in the Tool page.
-6. Wait for the build to finish:
-  - In case of an error, use the "view details" button on the "Builds" section of the Tool page to check the error message. The "retry build" can be used to re-attempt building from the same git ref if necessary.
-  - If you believe the build error is due to an issue on our end (e.g. with light-sdk or our infrastructure), please feel free to open an Issue on this repo!
-  - In case of success, the "download apk" button should appear. A new "Version" entry will be created with "pending approval" status.
-7. Our team will review the builds and reach out to you via e-mail if we have any feedback regarding the approval process.
-8. If you have any questions, please e-mail us at tools@thelightphone.com
+Open the project in Android Studio, or use Gradle:
 
-### Sharing Your Tool
-Once we release a version of LightOS that supports community tools, users will have an option to choose what kind of tools they want to be able to run on their device:
-- **Light-approved tools**: These include tools that are either built internally by the Light team, or built by the community and officially tested/signed-off by the Light team. We don't know _exactly_ what that sign-off process is going to look like, but as a heads-up: we're going to be looking pretty hard at whether a submitted tool matches the Light ethos both functionally and aesthetically. We've included a UX/UI library to make this as easy as possible! From a technical standpoint, these approved tools are both signed by us _and_ added to an "allow-list" within LightOS. Phones with this option selected will only install and display tools that meet both criteria.
-- **SDK-built tools**: This is a slightly more permissive choice. Phones with this option selected will install and launch any tool that was built and signed by Light. These don't require any manual approval by us (although we can block them in extreme cases). If a user wants to be able to install a tool that was shared locally or somewhere outside of Light's dashboard, but they still want to be confident that it will run well and integrate nicely with LightOS, they might choose this option.
-- **Any tools**: A user will have the option to make any APK launchable from LightOS, but they will own the responsibility of getting them installed/uninstalled. When a user selects this option, we will warn them that they are potentially opening their device up to security risks, and that doing so will limit our ability to support them if something goes wrong.
+```sh
+./gradlew :tool:testDebugUnitTest   # JVM tests: core logic, DSP, engines behind fakes
+./gradlew :tool:assembleDebug       # build the APK
+```
 
-## [Complete Documentation](./docs)
+**On the LightOS emulator:** set up the emulator by following [`docs/system_app`](docs/system_app). Then, in
+`tool/lighttool.toml`, swap `serverPackage` to `com.thelightphone.sdk.emulator` and build with
+`-DlightSdk.allowAltServerPackage=true`. The emulator AVD has no Light server to grant permissions, so grant the mic by
+hand:
+
+```sh
+adb shell pm grant com.stephenmorris.recorder android.permission.RECORD_AUDIO
+```
+
+Audio diagnostics (latency, take alignment, interface routing) are logged under the `RecorderAudio` tag:
+
+```sh
+adb logcat -s RecorderAudio
+```
+
+## Status
+
+All of v1 is built: screens, engines, export and Tool Manager. It has been checked on the emulator only. Several things
+can't be confirmed without a Light Phone III: take alignment, latency, CPU load, touch feel and how USB interfaces are
+routed. The list is in the [spec's open questions](tool/docs/spec.md#19-open-questions).
+
+## License
+
+See [LICENSE](LICENSE). Light requires community tools to be open source.
