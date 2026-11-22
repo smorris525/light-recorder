@@ -35,17 +35,18 @@ object RulerMarks {
         val scale = RulerScale.forView(view.secondsAcross, tape.inner)
         val onTape = tape.x(0.0, view)..tape.x(song.length, view)
         fun onScreen(left: Double, right: Double) = right > 0 && left < width
-        // Kept within the tape's ends, so at 0:00 and the song's end it sits inside the screen's margins.
+        // Kept within the tape's ends, so at 0:00 and the song's end it sits inside the screen's margins. Its place is
+        // kept even once it's off screen, so major ticks' times still give way to it there, sliding off together rather
+        // than popping back in as the playhead's time leaves.
         val playheadLabel = run {
             val text = TimeText.readout(playhead)
             val half = textWidth(text, true) / 2
             val lowest = onTape.start + half
             val centre = tape.x(playhead, view).coerceIn(lowest, maxOf(lowest, onTape.endInclusive - half))
-            Label(text, centre - half, isPlayhead = true).takeIf { onScreen(it.x, centre + half) }
+            Label(text, centre - half, isPlayhead = true)
         }
-        val clear = playheadLabel?.let { label ->
-            (label.x - LABEL_CLEARANCE)..(label.x + textWidth(label.text, true) + LABEL_CLEARANCE)
-        }
+        val playheadRight = playheadLabel.x + textWidth(playheadLabel.text, true)
+        val clear = (playheadLabel.x - LABEL_CLEARANCE)..(playheadRight + LABEL_CLEARANCE)
 
         val brackets = PointBrackets.spans(PointBrackets.uprights(song, view, width))
         val shown = tape.times(view)
@@ -72,7 +73,7 @@ object RulerMarks {
                     left = x - 3 - labelWidth
                 }
                 val right = left + labelWidth
-                val clears = clear == null || right < clear.start || left > clear.endInclusive
+                val clears = right < clear.start || left > clear.endInclusive
                 if (left in onTape && right in onTape && onScreen(left, right) && clears) {
                     labels += Label(text, left, isPlayhead = false)
                 }
@@ -85,7 +86,9 @@ object RulerMarks {
                 ticks += Tick(tickX, isMajor)
             }
         }
-        playheadLabel?.let { labels += it }
+        if (onScreen(playheadLabel.x, playheadRight)) {
+            labels += playheadLabel
+        }
         return ticks to labels
     }
 }

@@ -86,4 +86,13 @@ class RulerMarksTest {
         assertTrue(labels.none { it.text == "0:00" })
         assertTrue(labels.none { it.isPlayhead })
     }
+
+    @Test
+    fun aLabelStillGivesWayToThePlayheadsOnceThatsOffScreen() {
+        // Scrolled 13 s on, the playhead at 9 s is at x -28, its time wholly off the left edge; 0:10, at x -18, still
+        // has its time on screen, but it gave way to the playhead's and stays gone with it.
+        val (_, labels) = layout(playhead = 9.0, start = 13.0)
+        assertTrue(labels.none { it.isPlayhead })
+        assertTrue(labels.none { it.text == "0:10" })
+    }
 }
