@@ -13,6 +13,7 @@ import com.stephenmorris.recorder.platform.Recorder
 import com.stephenmorris.recorder.platform.RecorderViewModel
 import com.stephenmorris.recorder.song.TransportPanel
 import com.stephenmorris.recorder.tape.TrackInput
+import com.stephenmorris.recorder.tape.inputLabel
 import com.stephenmorris.recorder.ui.ScreenFrame
 import com.stephenmorris.recorder.ui.SummaryRow
 import com.stephenmorris.recorder.ui.backButton
@@ -53,6 +54,7 @@ class TrackScreen(sealedActivity: SealedLightActivity, private val trackId: UUID
         ready.model.songs.collectAsState().value
         val isMicRefused by ready.transport.isMicRefused.collectAsState()
         val hasInterface by ready.route.hasInterface.collectAsState()
+        val inputCount by ready.route.inputCount.collectAsState()
         ready.transport.take.collectAsState().value
         ready.transport.patternTake.collectAsState().value
         val track = ready.model.track(trackId) ?: return
@@ -65,7 +67,7 @@ class TrackScreen(sealedActivity: SealedLightActivity, private val trackId: UUID
             val inputName = if (track.input == TrackInput.MIC && isMicRefused) {
                 "microphone not allowed"
             } else {
-                track.input.displayName
+                track.inputLabel(inputCount)
             }
             // Locked while the track records, as a take can't change what it records from.
             SummaryRow(

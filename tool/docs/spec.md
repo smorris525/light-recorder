@@ -36,10 +36,11 @@ lowercase, as in Drums.
   monitoring instead, and the Track screen says so (§9).
 - **Input gain**, the handle on the armed Mic/Line track's meter. Android gives tools no mic gain control. The meter
   still shows the input level.
-- **Choosing the input.** Tools can't choose an input device (that needs `AudioManager`, which needs a `Context`).
-  The input is Android's default: the phone's own mic, a plugged-in USB-C headset's, or a USB audio interface's (§4.2).
-  So there's no row naming the device or its channel. Bluetooth is listen-only, since only call mode opens a Bluetooth
-  mic.
+- **Choosing the input device.** Tools can't choose an input device (that needs `AudioManager`, which needs a
+  `Context`). The input is Android's default: the phone's own mic, a plugged-in USB-C headset's, or a USB audio
+  interface's (§4.2). So the phone's mic can't be picked while an interface is in; unplug it instead. Which of an
+  interface's inputs a track records from *is* chosen, per track (§9). Bluetooth is listen-only, since only call mode
+  opens a Bluetooth mic.
 - **Guitar tracks and an amp.** An amp heard while playing needs monitoring through the
   app. A guitarist can still record a DI, or an amp modeller's output, on Mic/Line through an interface.
 - **A share sheet.** Export saves to Tool Manager instead (§13).
@@ -125,7 +126,15 @@ implementation:
   writer. The SDK's `LightAudioCapture` isn't used, since its flow drops buffers when the collector falls behind.
 - **Permission:** asked through the SDK (`checkPermission` / `rememberPermissionRequestLauncher`) the first time a
   Mic/Line track is armed. If refused, nothing arms, and that track's Input reads `microphone not allowed`.
-- **Which mic:** Android's default input (§1, "Not carried over").
+- **Which mic:** Android's default input (§1, "Left out").
+- **Which of an interface's inputs:** the mic opens mono, as everywhere. If it's routed to a `TYPE_USB_DEVICE` whose
+  `channelCounts` say more than one input (none said counts as 2, at most 8), it reopens on that device with a channel
+  index mask of all of them (`setPreferredDevice`), and the reader keeps only the armed track's input (`Track.channel`,
+  or Input 1 if the interface hasn't that many), so everything after it stays mono. If the inputs won't open together,
+  it records mono and counts the interface as having one input, for the session. A route change that leaves the
+  recorder the wrong shape (the interface pulled out, or plugged in while mono) reopens it, which ends a take under way.
+- **`inputCount`**, beside `hasInterface`: 1 without an interface; with one, the inputs its mic last opened with this
+  session, or 2 until it has.
 - **Whether it's an interface:** read from the audio streams themselves, as neither needs a `Context`:
   - While the input is open, `AudioRecord.routedDevice`, read after `startRecording()` and again in its
     `OnRoutingChangedListener`: `TYPE_USB_DEVICE` is an interface. `TYPE_BUILTIN_MIC`, `TYPE_USB_HEADSET` and anything
@@ -253,14 +262,18 @@ All three show the transport panel underneath.
 
 - **Track screen:** `LightTopBar` with `BACK` and "Track 2", and no right icon. Label-over-value rows, as Drums' Settings
   main page:
-  - **Input** (`Mic/Line` / `Drums` / `microphone not allowed`) opens Input. It's locked (dimmed, doesn't open) while
+  - **Input** (`Mic/Line` / `Input 2` / `Drums` / `microphone not allowed`) opens Input. A Mic/Line track whose input
+    isn't there records from Input 1, or the phone's mic, and says so: `Input 4 → Input 1`, `Input 2 → Mic/Line`. It's locked (dimmed, doesn't open) while
     that track records.
   - On Mic/Line while `hasInterface` (§4.2), under the rows: "to hear yourself, use your interface's monitor"
     (`Detail`). Not with the built-in mic or a headset, and not on Drums. It comes and goes as the interface does.
   - On Drums, **Pattern** (the selected pattern's name) opens Patterns.
-- **Input:** Drums' choice page (`ChoiceScreen`), titled "Input": Mic/Line, Drums. The current option is underlined
+- **Input:** Drums' choice page (`ChoiceScreen`), titled "Input": Mic/Line, Drums. With an interface of two or more
+  inputs (`inputCount`), Input 1 … Input N in place of Mic/Line; the input recording is the one underlined. It scrolls
+  when the rows don't fit. Opening it with an interface in opens the mic for a moment, if it's closed and allowed, to
+  learn how many inputs there are. Switching between inputs keeps the track armed. The current option is underlined
   (2 dp, about 3 dp under the text, as wide as it). Picking one moves the underline and the page stays open. Changing
-  input disarms the track and never changes what's recorded.
+  between Mic/Line and Drums disarms the track; no change of input changes what's recorded.
 - **Patterns:** `LightTopBar` with `BACK` and "Patterns". A `LightScrollView` of the song's patterns:
   - Each row is the name (`Paragraph`) over `92 BPM · 4/4 · 2 bars` (`Detail`). A tap selects the row, underlined, and
     the page stays open.
@@ -385,8 +398,8 @@ These need hardware; there's no Light Phone III to test on:
 - Output latency, and the pads' feel.
 - What a USB-C headset's mic does to a take (§4.2).
 - A USB audio interface (§4.2): whether LightOS routes the input to it at all; whether it reports `TYPE_USB_DEVICE`
-  (small iRig-style ones may say `TYPE_USB_HEADSET`, and a USB-C headset may say `TYPE_USB_DEVICE`); which channel a
-  mono `AudioRecord` gets from a two-input interface; whether the phone can power a bus-powered one; and take alignment
+  (small iRig-style ones may say `TYPE_USB_HEADSET`, and a USB-C headset may say `TYPE_USB_DEVICE`); what
+  `channelCounts` interfaces report, and whether LightOS opens a channel index mask of all of them; whether the phone can power a bus-powered one; and take alignment
   through it.
 - CPU: four tracks, the kit and a mic take, with the mix measured in the background.
 - The faders, pans and ruler scrub on the real touchscreen, and the haptics' feel: the ticks and the faders' and pans'
