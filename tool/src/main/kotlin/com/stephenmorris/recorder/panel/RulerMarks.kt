@@ -10,7 +10,7 @@ import kotlin.math.floor
 
 /**
  * What the ruler draws, without the drawing: a tick every minor step and a taller one
- * every major, none before 0:00 or past the song's end; each major tick's time just right of it, giving way to the
+ * every major, none before 0:00 or past the tape's end; each major tick's time just right of it, giving way to the
  * playhead's time; and the playhead's time over its marker, kept within the tape's ends. Times are printed on the tape:
  * they scroll off the screen's edges with it, kept while any of them is on screen, even once their tick is off.
  */
@@ -23,17 +23,21 @@ object RulerMarks {
     /** A time printed on the ruler, its left edge at [x]. */
     data class Label(val text: String, val x: Double, val isPlayhead: Boolean)
 
-    /** The ticks and labels across [width]; [textWidth] measures a label, `true` for the playhead's (medium) one. */
+    /**
+     * The ticks and labels across [width], up to the tape's [length]; [textWidth] measures a label, `true` for the
+     * playhead's (medium) one.
+     */
     fun layout(
         song: Song,
         view: TapeView,
         playhead: Double,
         width: Double,
+        length: Double = song.length,
         textWidth: (String, Boolean) -> Double,
     ): Pair<List<Tick>, List<Label>> {
         val tape = TapeFrame(width)
         val scale = RulerScale.forView(view.secondsAcross, tape.inner)
-        val onTape = tape.x(0.0, view)..tape.x(song.length, view)
+        val onTape = tape.x(0.0, view)..tape.x(length, view)
         fun onScreen(left: Double, right: Double) = right > 0 && left < width
         // Kept within the tape's ends, so at 0:00 and the song's end it sits inside the screen's margins. Its place is
         // kept even once it's off screen, so major ticks' times still give way to it there, sliding off together rather
@@ -55,7 +59,7 @@ object RulerMarks {
         val first = floor(shown.start / scale.minor).toInt() - minorsPerMajor
         val last = minOf(
             ceil(shown.endInclusive / scale.minor).toInt() + minorsPerMajor,
-            floor(song.length / scale.minor).toInt(),
+            floor(length / scale.minor).toInt(),
         )
         val ticks = mutableListOf<Tick>()
         val labels = mutableListOf<Label>()

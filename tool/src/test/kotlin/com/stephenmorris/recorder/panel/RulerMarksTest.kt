@@ -13,13 +13,28 @@ class RulerMarksTest {
     private val textWidth = { text: String, _: Boolean -> text.length * 5.0 }
 
     private fun layout(song: Song = this.song, playhead: Double = 0.0, start: Double = 0.0) =
-        RulerMarks.layout(song, TapeView(start = start), playhead, width, textWidth)
+        RulerMarks.layout(song, TapeView(start = start), playhead, width, textWidth = textWidth)
 
     @Test
     fun noTicksBeforeZeroOrPastTheEnd() {
         val (ticks, _) = layout()
         assertEquals(31, ticks.size)
         assertTrue(ticks.all { it.x in 12.0..312.0 })
+    }
+
+    @Test
+    fun aTakePastTheEndStillHasARuler() {
+        val view = TapeView(start = 40.0)
+        val (ticks, labels) = RulerMarks.layout(song, view, 55.0, width, song.lengthRecordingAt(55.0), textWidth)
+        // Scrolled 40 s on, past the blank tape's 0:30 end: 0:40 to 1:10 across, as the tape will be once it's kept.
+        assertEquals(listOf(12.0, 112.0, 212.0, 312.0), ticks.filter { it.isMajor }.map { it.x })
+        assertTrue(labels.any { it.text == "1:00" })
+    }
+
+    @Test
+    fun aTakeLengthensTheTapeAsItRuns() {
+        assertEquals(40.0, song.lengthRecordingAt(10.0))
+        assertEquals(85.0, song.lengthRecordingAt(55.0))
     }
 
     @Test

@@ -139,7 +139,8 @@ fun Ruler(ready: Recorder.Ready) {
     ) {
         val playhead = playheadState.value
         val widthDp = size.width / density.toDouble()
-        val (ticks, labels) = RulerMarks.layout(song, song.view, playhead, widthDp) { text, isPlayhead ->
+        val length = if (transport.isTakeUnderWay) song.lengthRecordingAt(playhead) else song.length
+        val (ticks, labels) = RulerMarks.layout(song, song.view, playhead, widthDp, length) { text, isPlayhead ->
             measurer.measure(text, if (isPlayhead) playheadStyle else style).size.width / density.toDouble()
         }
         val px = { dp: Double -> (dp * density).toFloat() }

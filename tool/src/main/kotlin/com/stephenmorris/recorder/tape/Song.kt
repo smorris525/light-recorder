@@ -73,6 +73,9 @@ data class Song(
     val length: Double
         get() = contentEnd + BLANK_TAPE
 
+    /** The tape's length while a take runs at [playhead]: it grows with the take, as it will once the take is kept. */
+    fun lengthRecordingAt(playhead: Double): Double = maxOf(length, playhead + BLANK_TAPE)
+
     /** Whether the in point may go at [time]: before the out point, if there is one. */
     fun canSetIn(time: Double): Boolean = outPoint?.let { time < it } ?: true
 
