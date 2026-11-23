@@ -74,6 +74,7 @@ class FakeInput(
     var opens = 0
     var closes = 0
     override var isOpen = false
+    override var channel = 1
     override val meter = InputMeter()
     override var framesDrained = 0L
     private val queued = ArrayDeque<Float>()

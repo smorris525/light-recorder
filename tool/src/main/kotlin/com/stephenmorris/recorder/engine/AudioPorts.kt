@@ -39,6 +39,9 @@ interface AudioInput {
 
     fun close()
 
+    /** Which input to keep, from 1, on an interface with more than one; set before or while open. */
+    var channel: Int
+
     val meter: InputMeter
 
     /** The samples captured since the last drain, in order, as many as fit. Returns how many it copied. */
