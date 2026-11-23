@@ -57,15 +57,18 @@ class SongEditing(private val model: SongModel, private val transport: Transport
     }
 
     /**
-     * Sets a track's input, disarming it first, as it may now be armed on the other input. Never while the track is
-     * recording; what's on its tape stays as it is.
+     * Sets a track's input, and on Mic/Line which of an interface's inputs. Changing between Mic/Line and Drums disarms
+     * it, as it may now be armed on the other; changing which input doesn't. Never while the track is recording; what's
+     * on its tape stays as it is.
      */
-    fun setInput(input: TrackInput, on: UUID) {
+    fun setInput(input: TrackInput, channel: Int = 1, on: UUID) {
         if (isRecording(on)) {
             return
         }
-        model.arming.value = model.arming.value.removing(on)
-        model.updateTrack(on) { it.copy(input = input) }
+        if (model.track(on)?.input != input) {
+            model.arming.value = model.arming.value.removing(on)
+        }
+        model.updateTrack(on) { it.copy(input = input, channel = if (input == TrackInput.MIC) channel else it.channel) }
     }
 
     /** ADD PATTERN on the Patterns page: the next pattern, selected (queued, during a take). */

@@ -94,6 +94,25 @@ class SongEditingTest {
     }
 
     @Test
+    fun pickingAnotherInputKeepsATrackArmed() {
+        transport.toggleArm(mic)
+
+        editing.setInput(TrackInput.MIC, 2, on = mic)
+
+        assertTrue(model.arming.value.isArmed(mic))
+        assertEquals(2, model.track(mic)?.channel)
+    }
+
+    @Test
+    fun pickingDrumsStillDisarms() {
+        transport.toggleArm(mic)
+
+        editing.setInput(TrackInput.DRUMS, on = mic)
+
+        assertFalse(model.arming.value.isArmed(mic))
+    }
+
+    @Test
     fun changingInputDisarmsTheTrack() {
         transport.toggleArm(drums)
         assertTrue(model.arming.value.isArmed(drums))

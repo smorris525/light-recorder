@@ -190,6 +190,74 @@ class TransportPlayTest {
     }
 
     @Test
+    fun theArmedTracksChannelReachesTheMic() {
+        val id = fixture.song.tracks[1].id
+        model.updateTrack(id) { it.copy(channel = 3) }
+
+        transport.toggleArm(id)
+        fixture.advance(20)
+
+        assertEquals(3, fixture.input.channel)
+    }
+
+    @Test
+    fun aMicThatDiesWhileArmedReopens() {
+        transport.toggleArm(fixture.song.tracks[1].id)
+        fixture.advance(20)
+        val opens = fixture.input.opens
+
+        fixture.input.die()
+        fixture.advance(20)
+
+        assertEquals(opens + 1, fixture.input.opens)
+        assertTrue(fixture.input.isOpen)
+    }
+
+    @Test
+    fun countingInputsOpensAndClosesAClosedMic() {
+        fixture.advance(20)
+        val closes = fixture.input.closes
+
+        transport.countInputs()
+
+        assertEquals(1, fixture.input.opens)
+        assertEquals(closes + 1, fixture.input.closes)
+        assertFalse(fixture.input.isOpen)
+    }
+
+    @Test
+    fun countingInputsLeavesAnOpenMicAlone() {
+        transport.toggleArm(fixture.song.tracks[1].id)
+        fixture.advance(20)
+        val opens = fixture.input.opens
+
+        transport.countInputs()
+
+        assertEquals(opens, fixture.input.opens)
+        assertTrue(fixture.input.isOpen)
+    }
+
+    @Test
+    fun countingInputsWithoutPermissionChangesNothing() {
+        fixture.advance(20)
+        fixture.input.granted = false
+
+        transport.countInputs()
+
+        assertFalse(transport.isMicRefused.value)
+    }
+
+    @Test
+    fun countingInputsWhilePausedDoesNothing() {
+        fixture.advance(20)
+        transport.pause()
+
+        transport.countInputs()
+
+        assertEquals(0, fixture.input.opens)
+    }
+
+    @Test
     fun aRefusedMicArmsNothingAndIsNotRetried() {
         fixture.input.granted = false
 

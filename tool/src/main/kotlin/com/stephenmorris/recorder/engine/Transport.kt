@@ -214,12 +214,27 @@ class Transport(
             refusedTrack = null
         }
         val wantsInput = wantsOutput && (_take.value != null || (armed != null && armed != refusedTrack))
+        // Which of an interface's inputs to keep: the armed track's, which a take can't change.
+        input.channel = armed?.let { model.track(it)?.channel } ?: 1
         if (wantsInput && !input.isOpen) {
             if (!input.open()) {
                 refusedTrack = armed
             }
         } else if (!wantsInput) {
             // Even when it reads as closed: a mic whose reader died still holds its recorder until it's closed.
+            input.close()
+        }
+    }
+
+    /**
+     * The Input page (spec §9): opens the mic for a moment, when it's closed, so the route learns how many inputs an
+     * interface has. Not while paused or with no song open; without the permission it just doesn't open.
+     */
+    fun countInputs() {
+        if (isPaused || !model.isSongOpen || input.isOpen) {
+            return
+        }
+        if (input.open()) {
             input.close()
         }
     }
