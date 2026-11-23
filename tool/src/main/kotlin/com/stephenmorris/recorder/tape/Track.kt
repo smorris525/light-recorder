@@ -11,6 +11,8 @@ data class Track(
     /** From 1 to [Song.TRACK_COUNT]. */
     val number: Int,
     val input: TrackInput,
+    /** Which of an interface's inputs a Mic/Line track records from, from 1. */
+    val channel: Int = 1,
     /** In dB, within [VOLUMES], or [SILENT]. */
     val volume: Int = 0,
     /** −50…50, in steps of 5. */

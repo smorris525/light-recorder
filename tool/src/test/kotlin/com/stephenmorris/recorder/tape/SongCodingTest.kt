@@ -6,6 +6,7 @@ import com.stephenmorris.recorder.core.StepGrid
 import java.util.UUID
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SongCodingTest {
@@ -51,6 +52,36 @@ class SongCodingTest {
         assertEquals(0, track.volume)
         assertEquals(0, track.pan)
         assertTrue(track.spans.isEmpty())
+    }
+
+    @Test
+    fun aTracksChannelComesBack() {
+        var song = Song.new("s")
+        song = song.withTrack(1, song.tracks[1].copy(channel = 3))
+        val read = SongCoding.decode(SongCoding.encode(listOf(song))).single()
+
+        assertEquals(3, read.tracks[1].channel)
+        assertEquals(1, read.tracks[2].channel)
+    }
+
+    @Test
+    fun aTrackSavedWithoutAChannelIsOnInput1() {
+        fun channel(extra: String): Int {
+            val track = """{"id":"${UUID.randomUUID()}","number":2,"input":"mic"$extra}"""
+            return decodeOne("""{"id":"${UUID.randomUUID()}","name":"s","tracks":[$track]}""").tracks[1].channel
+        }
+
+        assertEquals(1, channel(""))
+        assertEquals(1, channel(""","channel":0"""))
+        assertEquals(1, channel(""","channel":-2"""))
+        assertEquals(4, channel(""","channel":4"""))
+    }
+
+    @Test
+    fun channel1IsNotWritten() {
+        val json = SongCoding.encode(listOf(Song.new("s")))
+
+        assertFalse(json.contains("\"channel\""))
     }
 
     @Test

@@ -68,6 +68,7 @@ private data class TrackDto(
     val id: String? = null,
     val number: Int? = null,
     val input: String? = null,
+    val channel: Int? = null,
     val volume: Int = 0,
     val pan: Int = 0,
     val spans: List<JsonElement> = emptyList(),
@@ -120,6 +121,8 @@ private fun Track.dto() = TrackDto(
     id = id.toString(),
     number = number,
     input = input.raw,
+    // Input 1 isn't written, so a song only says which input when it's another.
+    channel = channel.takeIf { it != 1 },
     volume = volume,
     pan = pan,
     spans = spans.map {
@@ -199,6 +202,7 @@ private fun JsonObject.track(): Track? {
         id = id,
         number = number,
         input = TrackInput.fromRaw(text("input")) ?: TrackInput.MIC,
+        channel = whole("channel")?.takeIf { it >= 1 } ?: 1,
         volume = if (volume <= Track.SILENT) Track.SILENT else volume.coerceIn(Track.VOLUMES),
         pan = (whole("pan") ?: 0).coerceIn(-50, 50),
         spans = objects("spans").mapNotNull { span ->
