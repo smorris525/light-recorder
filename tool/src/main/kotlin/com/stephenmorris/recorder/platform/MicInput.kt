@@ -56,7 +56,6 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
     override val isOpen: Boolean
         get() = record != null && !failed
 
-    // RECORD_AUDIO is asked for before a Mic/Line track arms; without it AudioRecord won't initialise, as is checked.
     override fun open(): Boolean {
         if (record != null && !failed) {
             return true
@@ -106,6 +105,7 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
 
     private fun inputsOf(device: AudioDeviceInfo): Int = shapes.inputsOf(routeKind(device.type), device.id, device.channelCounts)
 
+    // RECORD_AUDIO is asked for before a Mic/Line track arms; without it AudioRecord won't initialise, as built() checks.
     @SuppressLint("MissingPermission")
     private fun mono(minimum: Int): AudioRecord? = built {
         AudioRecord(
@@ -117,6 +117,7 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
         )
     }
 
+    // As mono().
     @SuppressLint("MissingPermission")
     private fun multi(minimum: Int, count: Int, device: AudioDeviceInfo): AudioRecord? = built {
         val format = AudioFormat.Builder()

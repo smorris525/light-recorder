@@ -1,7 +1,8 @@
 package com.stephenmorris.recorder.tape
 
 /**
- * Where a track records from: the mic or line in (an interface's input), or the drum machine. Songs store [raw], so it
+ * Where a track records from: the mic (the phone's own, or one of an interface's inputs), or the drum machine. [MIC]
+ * is still called Mic/Line in the spec. Songs store [raw], so it
  * must never change.
  */
 enum class TrackInput(val raw: String) {
@@ -11,7 +12,7 @@ enum class TrackInput(val raw: String) {
     /** The name shown on screen. */
     val displayName: String
         get() = when (this) {
-            MIC -> "Mic/Line"
+            MIC -> "Built-In Mic"
             DRUMS -> "Drums"
         }
 

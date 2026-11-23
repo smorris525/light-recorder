@@ -26,7 +26,7 @@ enum class RouteKind {
  */
 class InterfaceRoute {
     private val _hasInterface = MutableStateFlow(false)
-    private val _inputCount = MutableStateFlow(1)
+    private val _inputCount = MutableStateFlow(0)
     private var input: RouteKind? = null
     private var output: RouteKind? = null
 
@@ -36,8 +36,8 @@ class InterfaceRoute {
     val hasInterface: StateFlow<Boolean> = _hasInterface.asStateFlow()
 
     /**
-     * How many inputs there are to choose from (spec §9): 1 without an interface; with one, as many as its mic last
-     * opened with, or 2 until it has.
+     * How many of an interface's inputs there are to choose from (spec §9): 0 without one, as the phone's own mic is
+     * the only input then; with one, as many as its mic last opened with, or 2 until it has.
      */
     val inputCount: StateFlow<Int> = _inputCount.asStateFlow()
 
@@ -62,6 +62,6 @@ class InterfaceRoute {
 
     private fun update() {
         _hasInterface.value = (input ?: output) == RouteKind.USB_DEVICE
-        _inputCount.value = if (_hasInterface.value) interfaceChannels ?: 2 else 1
+        _inputCount.value = if (_hasInterface.value) interfaceChannels ?: 2 else 0
     }
 }

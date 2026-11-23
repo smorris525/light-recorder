@@ -12,8 +12,13 @@ class InputChoiceTest {
         inputChoices(inputCount).filter { track.isChoice(it, inputCount) }.map { it.label(inputCount) }
 
     @Test
-    fun oneInputOrNoneIsMicLineAndDrums() {
-        assertEquals(listOf("Mic/Line", "Drums"), inputChoices(1).map { it.label(1) })
+    fun noInterfaceIsTheBuiltInMicAndDrums() {
+        assertEquals(listOf("Built-In Mic", "Drums"), inputChoices(0).map { it.label(0) })
+    }
+
+    @Test
+    fun aOneInputInterfaceIsInput1() {
+        assertEquals(listOf("Input 1", "Drums"), inputChoices(1).map { it.label(1) })
     }
 
     @Test
@@ -28,9 +33,11 @@ class InputChoiceTest {
     fun labels() {
         assertEquals("Input 2", mic(2).inputLabel(2))
         assertEquals("Input 1", mic(1).inputLabel(2))
-        assertEquals("Mic/Line", mic(1).inputLabel(1))
+        assertEquals("Input 1", mic(1).inputLabel(1))
+        assertEquals("Built-In Mic", mic(1).inputLabel(0))
         assertEquals("Input 4 → Input 1", mic(4).inputLabel(2))
-        assertEquals("Input 2 → Mic/Line", mic(2).inputLabel(1))
+        assertEquals("Input 2 → Input 1", mic(2).inputLabel(1))
+        assertEquals("Input 2 → Built-In Mic", mic(2).inputLabel(0))
         assertEquals("Drums", drums.inputLabel(4))
     }
 
@@ -39,13 +46,14 @@ class InputChoiceTest {
         assertEquals(2, recordedChannel(2, 4))
         assertEquals(1, recordedChannel(4, 2))
         assertEquals(1, recordedChannel(3, 1))
+        assertEquals(1, recordedChannel(2, 0))
     }
 
     @Test
     fun underlineIsWhatRecords() {
         assertEquals(listOf("Input 1"), underlined(mic(4), 2))
         assertEquals(listOf("Input 3"), underlined(mic(3), 4))
-        assertEquals(listOf("Mic/Line"), underlined(mic(2), 1))
+        assertEquals(listOf("Built-In Mic"), underlined(mic(2), 0))
         assertEquals(listOf("Drums"), underlined(drums, 2))
     }
 }

@@ -57,10 +57,10 @@ class InterfaceRouteTest {
     }
 
     @Test
-    fun inputCountIs1WithoutAnInterface() {
-        assertEquals(1, route.inputCount.value)
+    fun inputCountIs0WithoutAnInterface() {
+        assertEquals(0, route.inputCount.value)
         route.inputRouted(RouteKind.BUILT_IN, 1)
-        assertEquals(1, route.inputCount.value)
+        assertEquals(0, route.inputCount.value)
     }
 
     @Test
@@ -71,7 +71,7 @@ class InterfaceRouteTest {
         route.inputRouted(null)
         assertEquals(4, route.inputCount.value)
         route.outputRouted(RouteKind.BUILT_IN)
-        assertEquals(1, route.inputCount.value)
+        assertEquals(0, route.inputCount.value)
     }
 
     @Test

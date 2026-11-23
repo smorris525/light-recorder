@@ -89,7 +89,8 @@ In the `tape` package:
 
 - **Song:** id, name, notes, in point and out point (seconds, each optional), the view (`TapeView`), exactly four tracks,
   the patterns (at least one) and the selected pattern.
-- **Track:** id, number (1…4), input (`mic` | `drums`, shown as Mic/Line and Drums; the stored `mic` is unchanged),
+- **Track:** id, number (1…4), input (`mic` | `drums`; the spec calls `mic` Mic/Line, shown as Built-In Mic, or
+  Input 1 … Input N with an interface (§9), and Drums; the stored `mic` is unchanged),
   volume (−48…+6 dB, and silent below), pan (L50…C…R50 in steps of 5), spans (audio) and hits (drums).
   There's no mute or solo. The name is always `Track n`.
 - **Pattern:** Drums' pattern (name, BPM, meter, bars, swing, steps) belonging to the song.
@@ -133,7 +134,7 @@ implementation:
   or Input 1 if the interface hasn't that many), so everything after it stays mono. If the inputs won't open together,
   it records mono and counts the interface as having one input, for the session. A route change that leaves the
   recorder the wrong shape (the interface pulled out, or plugged in while mono) reopens it, which ends a take under way.
-- **`inputCount`**, beside `hasInterface`: 1 without an interface; with one, the inputs its mic last opened with this
+- **`inputCount`**, beside `hasInterface`: 0 without an interface; with one, the inputs its mic last opened with this
   session, or 2 until it has.
 - **Whether it's an interface:** read from the audio streams themselves, as neither needs a `Context`:
   - While the input is open, `AudioRecord.routedDevice`, read after `startRecording()` and again in its
@@ -262,16 +263,18 @@ All three show the transport panel underneath.
 
 - **Track screen:** `LightTopBar` with `BACK` and "Track 2", and no right icon. Label-over-value rows, as Drums' Settings
   main page:
-  - **Input** (`Mic/Line` / `Input 2` / `Drums` / `microphone not allowed`) opens Input. A Mic/Line track whose input
-    isn't there records from Input 1, or the phone's mic, and says so: `Input 4 → Input 1`, `Input 2 → Mic/Line`. It's locked (dimmed, doesn't open) while
+  - **Input** (`Built-In Mic` / `Input 2` / `Drums` / `microphone not allowed`) opens Input. A Mic/Line track whose
+    input isn't there records from Input 1, or the phone's mic, and says so: `Input 4 → Input 1`,
+    `Input 2 → Built-In Mic`. It's locked (dimmed, doesn't open) while
     that track records.
   - On Mic/Line while `hasInterface` (§4.2), under the rows: "to hear yourself, use your interface's monitor"
     (`Detail`). Not with the built-in mic or a headset, and not on Drums. It comes and goes as the interface does.
   - On Drums, **Pattern** (the selected pattern's name) opens Patterns.
-- **Input:** Drums' choice page (`ChoiceScreen`), titled "Input": Mic/Line, Drums. With an interface of two or more
-  inputs (`inputCount`), Input 1 … Input N in place of Mic/Line; the input recording is the one underlined. It scrolls
-  when the rows don't fit. Opening it with an interface in opens the mic for a moment, if it's closed and allowed, to
-  learn how many inputs there are. Switching between inputs keeps the track armed. The current option is underlined
+- **Input:** Drums' choice page (`ChoiceScreen`), titled "Input": Built-In Mic, Drums. With an interface in, Input 1
+  … Input N (`inputCount`, even when N is 1) in place of Built-In Mic; the input recording is the one underlined, and
+  picking it again changes nothing, so a missing input is remembered. It scrolls
+  when the rows don't fit. Opening it with an interface in, or plugging one in while it's open, opens the mic for a
+  moment, once a session, if it's closed, allowed and nothing's playing, to learn how many inputs there are. Switching between inputs keeps the track armed. The current option is underlined
   (2 dp, about 3 dp under the text, as wide as it). Picking one moves the underline and the page stays open. Changing
   between Mic/Line and Drums disarms the track; no change of input changes what's recorded.
 - **Patterns:** `LightTopBar` with `BACK` and "Patterns". A `LightScrollView` of the song's patterns:

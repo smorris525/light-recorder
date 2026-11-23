@@ -3,8 +3,8 @@
 A four-track recorder with a drum machine, for the Light Phone III.
 
 Recorder is a Light Phone tool. You record a song on four tracks. Each track
-takes either Mic/Line (the phone's mic, a USB-C headset or a USB audio interface) or Drums (patterns played from the
-built-in drum machine, which comes from the Drums tool). There's no network and no account, and nothing leaves the
+takes either a mic (the phone's own Built-In Mic, a USB-C headset's, or one of a USB audio interface's inputs, chosen
+per track) or Drums (patterns played from the built-in drum machine, which comes from the Drums tool). There's no network and no account, and nothing leaves the
 phone until you export it.
 
 ## What it does
@@ -12,7 +12,7 @@ phone until you export it.
 - **Library:** your songs, each listed with its length.
 - **Song:** four channel strips with input, pan, meter, fader and arm controls, above a transport panel that has a
   ruler, a waveform lane, in and out points, record and play.
-- **Tracks:** a Mic/Line or Drums input on each track. Arm one Mic/Line track and one Drums track at a time. A take
+- **Tracks:** a mic or Drums input on each track. Arm one mic track and one Drums track at a time. A take
   starts with a 3 s lead-in and punches in and out at the points you set.
 - **Drum machine:** each song has its own patterns, with a step grid, pads with count-in overdub, tempo, time signature,
   length and swing. Pattern takes are queued while recording.
