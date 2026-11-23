@@ -26,14 +26,27 @@ enum class RouteKind {
  */
 class InterfaceRoute {
     private val _hasInterface = MutableStateFlow(false)
+    private val _inputCount = MutableStateFlow(1)
     private var input: RouteKind? = null
     private var output: RouteKind? = null
 
+    /** The inputs an interface's mic last opened with this session; `null` until one has. */
+    private var interfaceChannels: Int? = null
+
     val hasInterface: StateFlow<Boolean> = _hasInterface.asStateFlow()
 
-    /** Where the input is routed now; `null` while it's closed. */
-    fun inputRouted(kind: RouteKind?) = synchronized(this) {
+    /**
+     * How many inputs there are to choose from (spec §9): 1 without an interface; with one, as many as its mic last
+     * opened with, or 2 until it has.
+     */
+    val inputCount: StateFlow<Int> = _inputCount.asStateFlow()
+
+    /** Where the input is routed now, and with how many [channels]; `null` while it's closed. */
+    fun inputRouted(kind: RouteKind?, channels: Int = 1) = synchronized(this) {
         input = kind
+        if (kind == RouteKind.USB_DEVICE) {
+            interfaceChannels = channels
+        }
         update()
     }
 
@@ -45,5 +58,6 @@ class InterfaceRoute {
 
     private fun update() {
         _hasInterface.value = (input ?: output) == RouteKind.USB_DEVICE
+        _inputCount.value = if (_hasInterface.value) interfaceChannels ?: 2 else 1
     }
 }
