@@ -31,7 +31,12 @@ class StereoTrackOutput private constructor(
     private val clock = OutputClock()
     private var track: AudioTrack? = null
     private var writer: Thread? = null
-    private var bufferFrames = BLOCK_FRAMES * 2
+    /**
+     * How much of the track's buffer is in use, which is what sets its latency: small to start with, and grown by the
+     * writer a block at a time when it underruns, as Oboe tunes a stream. The track's capacity is the largest it can be.
+     */
+    @Volatile
+    private var bufferFrames = START_FRAMES
 
     @Volatile
     private var running = false
@@ -108,7 +113,7 @@ class StereoTrackOutput private constructor(
         writer?.join()
         writer = null
         track?.let {
-            Log.i(TAG, "output suspended, underruns ${it.underrunCount}")
+            Log.i(TAG, "output suspended, underruns ${it.underrunCount}, buffer $bufferFrames frames")
             it.stop()
             it.release()
         }
@@ -127,7 +132,19 @@ class StereoTrackOutput private constructor(
         val right = FloatArray(BLOCK_FRAMES)
         val interleaved = FloatArray(BLOCK_FRAMES * 2)
         val track = track ?: return
+        var underruns = track.underrunCount
+        var written = 0L
         while (running) {
+            // The first second's underruns are the code warming up (interpreted, not yet compiled), not what it needs
+            // once it's running: growing for them would keep the latency they cost for good.
+            val now = track.underrunCount
+            if (now > underruns) {
+                underruns = now
+                if (written >= sampleRate) {
+                    grow(track)
+                }
+            }
+            written += BLOCK_FRAMES
             mix.render(left, right, BLOCK_FRAMES)
             for (frame in 0 until BLOCK_FRAMES) {
                 interleaved[frame * 2] = left[frame]
@@ -140,10 +157,24 @@ class StereoTrackOutput private constructor(
         }
     }
 
+    /** Writer only. Uses another block of the track's buffer, after an underrun, until it holds all it can. */
+    private fun grow(track: AudioTrack) {
+        val capacity = track.bufferCapacityInFrames
+        if (bufferFrames >= capacity) {
+            return
+        }
+        val size = track.setBufferSizeInFrames(minOf(bufferFrames + BLOCK_FRAMES, capacity))
+        if (size > 0) {
+            bufferFrames = size
+            Log.i(TAG, "output underran: buffer now $size of $capacity frames")
+        }
+    }
+
     private fun build(): AudioTrack? {
+        // The minimum is the capacity: Android's can be far more than the fast mixer needs (85 ms on a budget tablet).
         val minimum = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
-        bufferFrames = maxOf(minimum / (Float.SIZE_BYTES * 2), BLOCK_FRAMES * 2)
-        return try {
+        val capacity = maxOf(minimum / (Float.SIZE_BYTES * 2), START_FRAMES)
+        val built = try {
             AudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
@@ -160,13 +191,17 @@ class StereoTrackOutput private constructor(
                 )
                 .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
                 .setTransferMode(AudioTrack.MODE_STREAM)
-                .setBufferSizeInBytes(bufferFrames * Float.SIZE_BYTES * 2)
+                .setBufferSizeInBytes(capacity * Float.SIZE_BYTES * 2)
                 .build()
                 .takeIf { it.state == AudioTrack.STATE_INITIALIZED }
         } catch (exception: Exception) {
             Log.e(TAG, "AudioTrack build failed", exception)
             null
-        }
+        } ?: return null
+        val used = built.setBufferSizeInFrames(START_FRAMES)
+        bufferFrames = if (used > 0) used else built.bufferSizeInFrames
+        Log.i(TAG, "output built: capacity ${built.bufferCapacityInFrames} frames, using $bufferFrames")
+        return built
     }
 
     companion object {
@@ -174,6 +209,9 @@ class StereoTrackOutput private constructor(
 
         /** Frames rendered per write. */
         const val BLOCK_FRAMES = 192
+
+        /** The buffer in use at first: two blocks, 8 ms at 48 kHz. */
+        private const val START_FRAMES = BLOCK_FRAMES * 2
 
         /** The device's native output rate, which the output and every recording run at. */
         fun nativeRate(): Int = AudioTrack.getNativeOutputSampleRate(AudioManager.STREAM_MUSIC)

@@ -30,7 +30,9 @@ lowercase, as in Drums.
 ### Left out
 
 - **Monitor** (hearing the mic live). Kotlin-only audio can't get the round trip low enough to be playable, and a
-  delay you can hear is worse than none. A Mic/Line track's screen has only Input. With an interface plugged in, the player hears themselves on the interface's own direct
+  delay you can hear is worse than none. Tried on a budget tablet (Lenovo TB305FU, 2026-11-22): 50–60 ms mic to ear at
+  best, with a floor of about 45 ms. The input comes in 20 ms blocks with no low-latency path, and about 23 ms of the
+  output sits below the app's buffer. Players want under 20–25 ms. A Mic/Line track's screen has only Input. With an interface plugged in, the player hears themselves on the interface's own direct
   monitoring instead, and the Track screen says so (§9).
 - **Input gain**, the handle on the armed Mic/Line track's meter. Android gives tools no mic gain control. The meter
   still shows the input level.
@@ -106,6 +108,11 @@ implementation:
 - **Kotlin only.** Light's build rejects native code, so there's no Oboe or AAudio.
 - **One stereo float `AudioTrack`** (`PERFORMANCE_MODE_LOW_LATENCY`, the device's native rate, 48 kHz expected) fed by
   the tool's own mixer thread, as Drums does. Stereo, unlike Drums, because tracks pan.
+- **The buffer in use** (`setBufferSizeInFrames`) starts at two 192-frame blocks and grows a block at a time when the
+  track underruns, as Oboe tunes a stream. Android's minimum size is only its capacity: on the budget tablet it was
+  4,100 frames (85 ms), where the fast mixer needs far less. Underruns in the first second are ignored, as the mixer
+  code is still warming up then. On the tablet this took the output from about 110 ms to 30–40 ms, so pads sound
+  sooner after a tap.
 - **The mix:** each track's audio and drum hits at its volume and pan, then a `Limiter` per channel.
 - **The kit:** Drums' synthesised kit, rendered once at launch, with Recorder's headroom: 3 dB under Drums, so the default pattern peaks at about −2.6 dB, in the hot zone but short of full scale.
 - **Scheduling:** sample-accurate, ahead of the audio clock, for tape hits, live pattern steps, clip starts and the out
