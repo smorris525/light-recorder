@@ -248,6 +248,17 @@ class TransportPlayTest {
     }
 
     @Test
+    fun countingInputsWhilePlayingDoesNothing() {
+        fixture.advance(20)
+        transport.togglePlay()
+        fixture.advance(20)
+
+        transport.countInputs()
+
+        assertEquals(0, fixture.input.opens)
+    }
+
+    @Test
     fun countingInputsWhilePausedDoesNothing() {
         fixture.advance(20)
         transport.pause()

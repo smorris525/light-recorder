@@ -11,7 +11,9 @@ import android.os.Process
 import android.util.Log
 import com.stephenmorris.recorder.engine.AudioInput
 import com.stephenmorris.recorder.engine.InputMeter
+import com.stephenmorris.recorder.engine.InputShapes
 import com.stephenmorris.recorder.engine.InterfaceRoute
+import com.stephenmorris.recorder.engine.RoutedDevice
 import com.stephenmorris.recorder.engine.Stamp
 import com.stephenmorris.recorder.engine.deinterleave
 import com.stephenmorris.recorder.tape.CaptureRing
@@ -20,8 +22,8 @@ import com.stephenmorris.recorder.tape.recordedChannel
 /**
  * The mic (spec §4.2): a plain [AudioRecord] at the output's rate, 16-bit, read on its own thread at audio priority
  * into [meter] and a 30 s lock-free ring that the transport drains. Android's default input: the phone's mic, or a
- * plugged-in headset's, or an interface's. An interface with more than one input is opened with all of them (up to
- * [MAX_CHANNELS]) and only [channel] is kept, so what's metered and drained is always mono. Opening fails, returning
+ * plugged-in headset's, or an interface's. An interface with more than one input is opened with all of them (as
+ * [InputShapes] says) and only [channel] is kept, so what's metered and drained is always mono. Opening fails, returning
  * `false`, without `RECORD_AUDIO`. While open, it tells [route] which device it records from and with how many inputs.
  */
 class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) : AudioInput {
@@ -37,12 +39,9 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
     @Volatile
     override var channel = 1
 
-    /** How many inputs the open recorder reads: 1 unless it's an interface with more. Read by the route listener. */
-    @Volatile
+    /** How many inputs the open recorder reads: 1 unless it's an interface with more. */
     private var channels = 1
-
-    /** The interface whose inputs wouldn't open together, so it isn't tried again on every route change. */
-    private var refusedDevice: Int? = null
+    private val shapes = InputShapes()
 
     /** The reader stopped on an error: the mic reads as closed until it's opened again. */
     @Volatile
@@ -71,16 +70,21 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
         var built = started(mono(minimum)) ?: return false
         var count = 1
         val device = built.routedDevice
-        val wanted = device?.let(::inputsOf) ?: 1
+        val wanted = device?.let { inputsOf(it) } ?: 1
         if (wanted > 1 && device != null) {
             discard(built)
-            val all = started(multi(minimum, wanted, device))
+            var all = started(multi(minimum, wanted, device))
+            // Started, but on another device: the interface's inputs aren't to be had together.
+            if (all != null && all.routedDevice?.id != device.id) {
+                discard(all)
+                all = null
+            }
             if (all != null) {
                 built = all
                 count = wanted
             } else {
                 Log.w(TAG, "${device.productName}'s $wanted inputs wouldn't open together: mono")
-                refusedDevice = device.id
+                shapes.refuse(device.id)
                 built = started(mono(minimum)) ?: return false
             }
         }
@@ -93,20 +97,14 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
         record = built
         failed = false
         running = true
-        reader = Thread({ readLoop(built, count) }, "RecorderMic").apply { start() }
+        val deviceId = built.routedDevice?.id
+        reader = Thread({ readLoop(built, count, deviceId) }, "RecorderMic").apply { start() }
         Log.i(TAG, "input: $count channel(s) from ${built.routedDevice?.productName}")
         reportRoute(built)
         return true
     }
 
-    /** An interface's inputs worth opening together, or 1 for anything else or one that refused. */
-    private fun inputsOf(device: AudioDeviceInfo): Int {
-        if (device.type != AudioDeviceInfo.TYPE_USB_DEVICE || device.id == refusedDevice) {
-            return 1
-        }
-        // An interface that doesn't say counts as two (spec §9).
-        return (device.channelCounts.maxOrNull() ?: 2).coerceIn(1, MAX_CHANNELS)
-    }
+    private fun inputsOf(device: AudioDeviceInfo): Int = shapes.inputsOf(routeKind(device.type), device.id, device.channelCounts)
 
     @SuppressLint("MissingPermission")
     private fun mono(minimum: Int): AudioRecord? = built {
@@ -209,27 +207,34 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
         route.inputRouted(routeKind(device?.type), channels)
         // Opened for another device's inputs (an interface pulled out, or plugged in while mono): it reads as closed,
         // so the transport opens it again in the right shape.
-        if (channels != (device?.let(::inputsOf) ?: 1)) {
-            Log.i(TAG, "input reopens: $channels channel(s) open, the device has ${device?.let(::inputsOf)}")
+        val routed = device?.let { RoutedDevice(routeKind(it.type), it.id, it.channelCounts) }
+        if (shapes.needsReopen(channels, routed)) {
+            Log.i(TAG, "input reopens: $channels channel(s) open on ${device?.productName}")
             failed = true
         }
     }
 
-    private fun readLoop(built: AudioRecord, count: Int) {
+    private fun readLoop(built: AudioRecord, count: Int, deviceId: Int?) {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         val shorts = ShortArray(READ_FRAMES * count)
         val floats = FloatArray(READ_FRAMES)
+        var delivered = 0L
         while (running) {
             val read = built.read(shorts, 0, shorts.size)
             if (read <= 0) {
                 if (read < 0) {
                     Log.e(TAG, "mic read failed: $read")
+                    // An interface's inputs that started together but never delivered aren't tried together again.
+                    if (count > 1 && delivered == 0L && deviceId != null) {
+                        shapes.refuse(deviceId)
+                    }
                     failed = true
                 }
                 break
             }
             val frames = read / count
             deinterleave(shorts, frames, count, recordedChannel(channel, count), floats)
+            delivered += frames
             meter.record(floats, frames)
             ring.write(floats, frames)
         }
@@ -239,8 +244,5 @@ class MicInput(private val sampleRate: Int, private val route: InterfaceRoute) :
         const val TAG = StereoTrackOutput.TAG
         const val READ_FRAMES = 480
         const val RING_SECONDS = 30
-
-        /** The most inputs opened together: Android's long-standing capture limit. */
-        const val MAX_CHANNELS = 8
     }
 }

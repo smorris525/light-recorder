@@ -79,4 +79,12 @@ class InterfaceRouteTest {
         route.outputRouted(RouteKind.USB_DEVICE)
         assertEquals(2, route.inputCount.value)
     }
+
+    @Test
+    fun anInterfaceIsCountedOnceItsInputOpens() {
+        route.outputRouted(RouteKind.USB_DEVICE)
+        assertFalse(route.isCounted)
+        route.inputRouted(RouteKind.USB_DEVICE, 2)
+        assertTrue(route.isCounted)
+    }
 }

@@ -41,6 +41,10 @@ class InterfaceRoute {
      */
     val inputCount: StateFlow<Int> = _inputCount.asStateFlow()
 
+    /** Whether an interface's mic has opened this session, so [inputCount] isn't a guess. */
+    val isCounted: Boolean
+        get() = synchronized(this) { interfaceChannels != null }
+
     /** Where the input is routed now, and with how many [channels]; `null` while it's closed. */
     fun inputRouted(kind: RouteKind?, channels: Int = 1) = synchronized(this) {
         input = kind

@@ -33,9 +33,9 @@ class InputScreen(sealedActivity: SealedLightActivity, private val trackId: UUID
         val current = ready ?: return ScreenFrame { }
         current.model.songs.collectAsState().value
         val inputCount by current.route.inputCount.collectAsState()
-        // With an interface in, the mic opens for a moment to learn how many inputs it has.
+        // With an interface in, the mic opens for a moment to learn how many inputs it has, once a session.
         LaunchedEffect(Unit) {
-            if (current.route.hasInterface.value) {
+            if (current.route.hasInterface.value && !current.route.isCounted) {
                 current.transport.countInputs()
             }
         }

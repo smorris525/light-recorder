@@ -228,10 +228,11 @@ class Transport(
 
     /**
      * The Input page (spec §9): opens the mic for a moment, when it's closed, so the route learns how many inputs an
-     * interface has. Not while paused or with no song open; without the permission it just doesn't open.
+     * interface has. Not while paused, with no song open, or while playing (opening a USB recorder blocks the thread
+     * the tape is scheduled on); without the permission it just doesn't open.
      */
     fun countInputs() {
-        if (isPaused || !model.isSongOpen || input.isOpen) {
+        if (isPaused || !model.isSongOpen || input.isOpen || _isPlaying.value || _patternTake.value != null) {
             return
         }
         if (input.open()) {
