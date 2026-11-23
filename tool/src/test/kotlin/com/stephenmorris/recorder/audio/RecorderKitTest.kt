@@ -22,9 +22,9 @@ class RecorderKitTest {
     fun voicesAreDrumsKitTurnedDownByTheHeadroom() {
         val drums = DrumKit.voices(rate)
         val recorder = RecorderKit.voices(rate)
-        val down = 10.0.pow(-7.0 / 20).toFloat()
+        val down = 10.0.pow(-3.0 / 20).toFloat()
 
-        assertEquals(7.0, RecorderKit.HEADROOM_DB)
+        assertEquals(3.0, RecorderKit.HEADROOM_DB)
         assertEquals(drums.size, recorder.size)
         for (index in drums.indices) {
             assertEquals(drums[index].samples.size, recorder[index].samples.size)
@@ -40,14 +40,14 @@ class RecorderKitTest {
     }
 
     /**
-     * The kit leaves the mix headroom. The default pattern at 0 dB peaks around −6.6 dB,
-     * just under the meter's hot zone (−6.5 dB), not at full scale.
+     * The kit leaves the mix headroom. The default pattern at 0 dB peaks around −2.6 dB,
+     * in the meter's hot zone (from −6.5 dB) but short of full scale.
      */
     @Test
     fun defaultPatternPeaksUnderFullScale() {
         val levels = assertNotNull(MixLevels.render(Song.sample, ClipStore(), emptyMap(), RecorderKit.voices(rate), rate))
         val peak = assertNotNull(levels.peaks.maxOrNull())
         val decibels = 20 * log10(peak.toDouble())
-        assertTrue(decibels > -7 && decibels <= -6.5, "peaks at $decibels dB")
+        assertTrue(decibels > -3 && decibels <= -2, "peaks at $decibels dB")
     }
 }

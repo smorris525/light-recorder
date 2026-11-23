@@ -107,7 +107,7 @@ implementation:
 - **One stereo float `AudioTrack`** (`PERFORMANCE_MODE_LOW_LATENCY`, the device's native rate, 48 kHz expected) fed by
   the tool's own mixer thread, as Drums does. Stereo, unlike Drums, because tracks pan.
 - **The mix:** each track's audio and drum hits at its volume and pan, then a `Limiter` per channel.
-- **The kit:** Drums' synthesised kit, rendered once at launch, with Recorder's headroom: 7 dB under Drums, so the default pattern peaks just under the hot zone.
+- **The kit:** Drums' synthesised kit, rendered once at launch, with Recorder's headroom: 3 dB under Drums, so the default pattern peaks at about −2.6 dB, in the hot zone but short of full scale.
 - **Scheduling:** sample-accurate, ahead of the audio clock, for tape hits, live pattern steps, clip starts and the out
   point's stop. The playhead derives from the audio clock.
 
