@@ -68,12 +68,6 @@ Audio diagnostics (latency, take alignment, interface routing) are logged under 
 adb logcat -s RecorderAudio
 ```
 
-## Status
-
-All of v1 is built: screens, engines, export and Tool Manager. It has been checked on the emulator only. Several things
-can't be confirmed without a Light Phone III: take alignment, latency, CPU load, touch feel and how USB interfaces are
-routed. The list is in the [spec's open questions](tool/docs/spec.md#19-open-questions).
-
 ## License
 
 See [LICENSE](LICENSE). Light requires community tools to be open source.
