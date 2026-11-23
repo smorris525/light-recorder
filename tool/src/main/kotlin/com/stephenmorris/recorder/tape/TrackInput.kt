@@ -12,7 +12,7 @@ enum class TrackInput(val raw: String) {
     /** The name shown on screen. */
     val displayName: String
         get() = when (this) {
-            MIC -> "Built-In Mic"
+            MIC -> "Microphone"
             DRUMS -> "Drums"
         }
 

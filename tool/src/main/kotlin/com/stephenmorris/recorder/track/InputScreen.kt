@@ -15,8 +15,8 @@ import com.thelightphone.sdk.SealedLightActivity
 import java.util.UUID
 
 /**
- * A track's input (spec §9): Built-In Mic or Drums, the current one underlined, over the transport panel; with an
- * interface, each of its inputs in place of Built-In Mic. Changing between Mic/Line and Drums disarms the
+ * A track's input (spec §9): Microphone or Drums, the current one underlined, over the transport panel; with an
+ * interface, each of its inputs in place of Microphone. Changing between Mic/Line and Drums disarms the
  * track; nothing changes what's on its tape.
  */
 class InputScreen(sealedActivity: SealedLightActivity, private val trackId: UUID) :
